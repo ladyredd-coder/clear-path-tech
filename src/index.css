@@ -1,0 +1,29 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display: "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+@layer base {
+  html {
+    font-family: var(--font-sans);
+    background-color: #101114;
+    color: #F3F4F6;
+  }
+}
+
+.studio-grid-bg {
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+.studio-grid-light {
+  background-image:
+    linear-gradient(to right, rgba(16, 17, 20, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(16, 17, 20, 0.05) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
