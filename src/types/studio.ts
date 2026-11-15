@@ -4,6 +4,8 @@ export type ImageResolution = '1K' | '2K' | '4K';
 
 export type VideoAspectRatio = '16:9' | '9:16';
 
+export type AnimationEasing = 'ease-in' | 'ease-out' | 'linear' | 'bouncy';
+
 export type LogoStyleId =
   | 'minimalist-geometric'
   | 'heritage-emblem'
@@ -81,12 +83,29 @@ export interface AnimationAsset {
   companyName: string;
   aspectRatio: VideoAspectRatio;
   duration: '5s' | '8s' | '10s';
+  easing: AnimationEasing;
   motionPresetLabel: string;
   motionPrompt: string;
   videoUrl: string;
   mimeType: string;
   fileExtension: 'mp4' | 'webm';
   createdAt: string;
+}
+
+export interface SuggestedBrief {
+  ready: boolean;
+  companyName: string;
+  description: string;
+  stylePreset: LogoStyleId;
+  paletteHint: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  text: string;
+  quickPrompts?: string[];
+  suggestedBrief?: SuggestedBrief;
 }
 
 export const LOGO_STYLE_PRESETS: LogoStylePreset[] = [

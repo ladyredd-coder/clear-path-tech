@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Download, Film, RefreshCw, Sparkles, Upload } from 'lucide-react';
+import { Download, Film, MessageSquare, RefreshCw, Sparkles, Upload } from 'lucide-react';
 import { ConceptSlot, LogoAsset } from '../types/studio';
 import { downloadLogoAsPng, downloadSvgMarkup } from '../utils/exportAndMotion';
 
@@ -11,9 +11,10 @@ interface ConceptStageProps {
   onSendToMotion: (asset: LogoAsset) => void;
   onUploadFile: (file: File) => void;
   onLoadSample: (sampleKey: 'orbital' | 'vesper') => void;
+  onOpenChat: () => void;
 }
 
-type ProofSurface = 'charcoal' | 'paper' | 'slate';
+type ProofSurface = 'paper' | 'slate' | 'midnight';
 
 export const ConceptStage: React.FC<ConceptStageProps> = ({
   slots,
@@ -23,55 +24,72 @@ export const ConceptStage: React.FC<ConceptStageProps> = ({
   onSendToMotion,
   onUploadFile,
   onLoadSample,
+  onOpenChat,
 }) => {
-  const [proofSurface, setProofSurface] = useState<ProofSurface>('charcoal');
+  const [proofSurface, setProofSurface] = useState<ProofSurface>('paper');
 
   const proofClasses: Record<ProofSurface, string> = {
-    charcoal: 'bg-[#101114] studio-grid-bg border-white/[0.08]',
-    paper: 'bg-[#F5F3EE] studio-grid-light border-black/[0.08]',
-    slate: 'bg-[#262A34] border-white/[0.1]',
+    paper: 'bg-white border-slate-200',
+    slate: 'bg-[#EEF2FF] border-indigo-200',
+    midnight: 'studio-grid-dark border-slate-800',
   };
 
   if (slots.length === 0 && !selectedAsset) {
     return (
       <section className="flex-1 studio-grid-bg p-8 lg:p-12 flex items-center justify-center">
-        <div className="max-w-2xl w-full border border-white/[0.08] bg-[#17191E]/95 rounded-xl p-8 lg:p-10">
-          <div className="text-xs font-medium text-[#E5A93C]">
-            Identity & Motion Workspace
+        <div className="max-w-2xl w-full border border-slate-200 bg-white rounded-2xl p-8 lg:p-10 shadow-sm">
+          <div className="text-xs font-semibold text-[#4F46E5]">
+            Welcome to Forma Studio
           </div>
-          <h1 className="mt-2 font-display text-3xl lg:text-4xl font-semibold tracking-tight text-[#F3F4F6] text-balance">
+          <h1 className="mt-2 font-display text-3xl lg:text-4xl font-semibold tracking-tight text-slate-900 text-balance">
             Design side-by-side logo concepts, then bring your mark to life.
           </h1>
-          <p className="mt-4 text-sm lg:text-base text-[#9CA3AF] leading-relaxed max-w-xl">
-            Describe your company in the brief rail, choose a style direction and 1K, 2K, or 4K output resolution, and compare multiple art-directed concepts before animating into 16:9 or 9:16 video.
+          <p className="mt-4 text-sm lg:text-base text-slate-600 leading-relaxed max-w-xl">
+            Describe your company in the brief rail, choose a style direction, and compare multiple art-directed concepts before animating into 16:9 or 9:16 video.
           </p>
 
-          <div className="mt-8 grid sm:grid-cols-2 gap-4 pt-6 border-t border-white/[0.08]">
+          <div className="mt-8 grid sm:grid-cols-3 gap-4 pt-6 border-t border-slate-200">
             <button
               type="button"
-              onClick={() => onLoadSample('orbital')}
-              className="text-left p-4 rounded-lg bg-[#101114] border border-white/[0.08] hover:border-[#E5A93C] transition-colors group"
+              onClick={onOpenChat}
+              className="text-left p-4 rounded-xl bg-[#EEF2FF] border border-indigo-200 hover:border-[#4F46E5] transition-colors group"
             >
               <div className="flex items-center justify-between">
-                <span className="text-sm font-semibold text-[#F3F4F6] group-hover:text-[#E5A93C] transition-colors">
-                  Try Tech Brief
+                <span className="text-sm font-semibold text-slate-900 group-hover:text-[#4F46E5] transition-colors">
+                  Ask Gemini Guide
                 </span>
-                <Sparkles className="w-4 h-4 text-[#9CA3AF] group-hover:text-[#E5A93C] transition-colors" />
+                <MessageSquare className="w-4 h-4 text-[#4F46E5]" />
               </div>
-              <p className="mt-1.5 text-xs text-[#9CA3AF] leading-relaxed">
-                Kestrel Orbital — autonomous satellite logistics with minimalist geometric marks.
+              <p className="mt-1.5 text-xs text-slate-600 leading-relaxed">
+                Unsure what you want? Brainstorm symbols and colors in chat.
               </p>
             </button>
 
-            <label className="text-left p-4 rounded-lg bg-[#101114] border border-white/[0.08] hover:border-[#E5A93C] transition-colors cursor-pointer group">
+            <button
+              type="button"
+              onClick={() => onLoadSample('orbital')}
+              className="text-left p-4 rounded-xl bg-[#F8FAFC] border border-slate-200 hover:border-[#4F46E5] transition-colors group"
+            >
               <div className="flex items-center justify-between">
-                <span className="text-sm font-semibold text-[#F3F4F6] group-hover:text-[#E5A93C] transition-colors">
-                  Upload Existing Logo
+                <span className="text-sm font-semibold text-slate-900 group-hover:text-[#4F46E5] transition-colors">
+                  Try Sample Brief
                 </span>
-                <Upload className="w-4 h-4 text-[#9CA3AF] group-hover:text-[#E5A93C] transition-colors" />
+                <Sparkles className="w-4 h-4 text-slate-400 group-hover:text-[#4F46E5] transition-colors" />
               </div>
-              <p className="mt-1.5 text-xs text-[#9CA3AF] leading-relaxed">
-                Bring your own PNG, JPG, or WebP logo directly into the studio to animate.
+              <p className="mt-1.5 text-xs text-slate-600 leading-relaxed">
+                Load Kestrel Orbital into the brief rail to see how it works.
+              </p>
+            </button>
+
+            <label className="text-left p-4 rounded-xl bg-[#F8FAFC] border border-slate-200 hover:border-[#4F46E5] transition-colors cursor-pointer group">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-semibold text-slate-900 group-hover:text-[#4F46E5] transition-colors">
+                  Upload Logo
+                </span>
+                <Upload className="w-4 h-4 text-slate-400 group-hover:text-[#4F46E5] transition-colors" />
+              </div>
+              <p className="mt-1.5 text-xs text-slate-600 leading-relaxed">
+                Bring your own PNG, JPG, or WebP artwork directly to animate.
               </p>
               <input
                 type="file"
@@ -95,14 +113,14 @@ export const ConceptStage: React.FC<ConceptStageProps> = ({
         <div className="flex flex-col gap-4">
           <div className="flex flex-wrap items-baseline justify-between gap-4">
             <div>
-              <h1 className="font-display text-xl font-semibold text-[#F3F4F6]">
+              <h1 className="font-display text-xl font-semibold text-slate-900">
                 Generated Logo Concepts
               </h1>
-              <p className="mt-0.5 text-xs text-[#9CA3AF]">
+              <p className="mt-0.5 text-xs text-slate-500">
                 Select any mark to proof contrast or send directly to the Motion Stage.
               </p>
             </div>
-            <div className="font-mono text-xs tabular-nums text-[#9CA3AF]">
+            <div className="font-mono text-xs tabular-nums text-slate-500">
               {slots.filter((s) => s.status === 'ready').length} / {slots.length} ready
             </div>
           </div>
@@ -123,17 +141,17 @@ export const ConceptStage: React.FC<ConceptStageProps> = ({
               return (
                 <div
                   key={slot.slotIndex}
-                  className={`rounded-xl border bg-[#17191E] overflow-hidden flex flex-col transition-colors ${
+                  className={`rounded-xl border bg-white overflow-hidden flex flex-col transition-colors ${
                     isSelected
-                      ? 'border-[#E5A93C]'
-                      : 'border-white/[0.08] hover:border-white/[0.2]'
+                      ? 'border-[#4F46E5] ring-2 ring-[#4F46E5]/20'
+                      : 'border-slate-200 hover:border-slate-300'
                   }`}
                 >
-                  <div className="relative aspect-square bg-[#101114] flex items-center justify-center overflow-hidden">
+                  <div className="relative aspect-square bg-[#F1F5F9] flex items-center justify-center overflow-hidden">
                     {slot.status === 'loading' && (
                       <div className="w-full h-full p-6 flex flex-col items-center justify-center gap-3">
-                        <div className="w-24 h-24 rounded-xl bg-white/[0.05] animate-pulse" />
-                        <span className="font-mono text-xs text-[#9CA3AF]">
+                        <div className="w-24 h-24 rounded-xl bg-slate-200 animate-pulse" />
+                        <span className="font-mono text-xs text-slate-500">
                           Rendering {slot.variationLabel}...
                         </span>
                       </div>
@@ -141,13 +159,13 @@ export const ConceptStage: React.FC<ConceptStageProps> = ({
 
                     {slot.status === 'error' && (
                       <div className="p-6 text-center flex flex-col items-center gap-3">
-                        <p className="text-xs text-red-400 leading-relaxed max-w-[240px]">
+                        <p className="text-xs text-red-600 leading-relaxed max-w-[240px]">
                           {slot.error || 'Concept generation failed.'}
                         </p>
                         <button
                           type="button"
                           onClick={() => onRetrySlot(slot.slotIndex)}
-                          className="h-9 px-3 rounded-lg bg-[#1E2128] border border-white/[0.12] hover:border-[#E5A93C] text-xs font-medium text-[#F3F4F6] inline-flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0"
+                          className="h-9 px-3 rounded-lg bg-white border border-slate-200 hover:border-[#4F46E5] text-xs font-medium text-slate-800 inline-flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0"
                         >
                           <RefreshCw className="w-3.5 h-3.5" />
                           <span>Retry Slot</span>
@@ -159,25 +177,25 @@ export const ConceptStage: React.FC<ConceptStageProps> = ({
                       <button
                         type="button"
                         onClick={() => onSelectAsset(slot.asset!)}
-                        className="w-full h-full focus:outline-none group"
+                        className="w-full h-full focus:outline-none group bg-white"
                         aria-label={`Select ${slot.variationLabel} concept`}
                       >
                         <img
                           src={slot.asset.dataUrl}
                           alt={`${slot.asset.companyName} ${slot.variationLabel} logo concept`}
                           referrerPolicy="no-referrer"
-                          className="w-full h-full object-contain p-3 transition-transform duration-200 group-hover:scale-[1.02]"
+                          className="w-full h-full object-contain p-4 transition-transform duration-200 group-hover:scale-[1.02]"
                         />
                       </button>
                     )}
                   </div>
 
-                  <div className="p-4 border-t border-white/[0.08] flex items-center justify-between gap-3">
+                  <div className="p-4 border-t border-slate-200 flex items-center justify-between gap-3">
                     <div className="min-w-0">
-                      <div className="text-sm font-medium text-[#F3F4F6] truncate">
+                      <div className="text-sm font-medium text-slate-900 truncate">
                         {slot.variationLabel}
                       </div>
-                      <div className="mt-0.5 flex items-center gap-1.5 text-xs text-[#9CA3AF] truncate">
+                      <div className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-500 truncate">
                         <span>{slot.asset?.styleLabel ?? 'Queued'}</span>
                         {slot.asset && (
                           <>
@@ -203,14 +221,14 @@ export const ConceptStage: React.FC<ConceptStageProps> = ({
                           }
                           title={`Download ${slot.asset.resolutionLabel} PNG`}
                           aria-label="Download PNG"
-                          className="w-9 h-9 rounded-lg bg-[#1E2128] border border-white/[0.08] hover:border-white/[0.25] flex items-center justify-center text-[#9CA3AF] hover:text-[#F3F4F6] transition-colors"
+                          className="w-9 h-9 rounded-lg bg-[#F8FAFC] border border-slate-200 hover:border-slate-300 flex items-center justify-center text-slate-600 hover:text-slate-900 transition-colors"
                         >
                           <Download className="w-4 h-4" />
                         </button>
                         <button
                           type="button"
                           onClick={() => onSendToMotion(slot.asset!)}
-                          className="h-9 px-3 rounded-lg bg-[#1E2128] border border-white/[0.12] hover:border-[#E5A93C] hover:text-[#E5A93C] text-xs font-semibold text-[#F3F4F6] inline-flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0"
+                          className="h-9 px-3 rounded-lg bg-[#EEF2FF] border border-indigo-200 hover:bg-[#4F46E5] hover:text-white hover:border-[#4F46E5] text-xs font-semibold text-[#4F46E5] inline-flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0"
                         >
                           <Film className="w-3.5 h-3.5" />
                           <span>Animate</span>
@@ -226,7 +244,7 @@ export const ConceptStage: React.FC<ConceptStageProps> = ({
       )}
 
       {selectedAsset && (
-        <div className="border border-white/[0.08] bg-[#17191E] rounded-xl p-6 flex flex-col lg:flex-row gap-6 items-stretch">
+        <div className="border border-slate-200 bg-white rounded-xl p-6 flex flex-col lg:flex-row gap-6 items-stretch">
           <div
             className={`w-full lg:w-72 aspect-square rounded-lg border flex items-center justify-center shrink-0 overflow-hidden transition-colors ${proofClasses[proofSurface]}`}
           >
@@ -242,10 +260,10 @@ export const ConceptStage: React.FC<ConceptStageProps> = ({
             <div className="flex flex-col gap-3">
               <div className="flex flex-wrap items-center justify-between gap-4">
                 <div>
-                  <h2 className="font-display text-lg font-semibold text-[#F3F4F6]">
+                  <h2 className="font-display text-lg font-semibold text-slate-900">
                     {selectedAsset.companyName || 'Selected Artwork'} — {selectedAsset.variationLabel}
                   </h2>
-                  <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[#9CA3AF]">
+                  <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
                     <span>{selectedAsset.source === 'uploaded' ? 'Uploaded Image' : selectedAsset.styleLabel}</span>
                     <span aria-hidden="true">·</span>
                     <span className="font-mono tabular-nums">{selectedAsset.resolutionLabel}</span>
@@ -254,12 +272,12 @@ export const ConceptStage: React.FC<ConceptStageProps> = ({
                   </div>
                 </div>
 
-                <div className="flex items-center gap-1 p-1 rounded-lg bg-[#101114] border border-white/[0.08]">
+                <div className="flex items-center gap-1 p-1 rounded-lg bg-[#F1F5F9] border border-slate-200">
                   {(
                     [
-                      { id: 'charcoal', label: 'Charcoal' },
-                      { id: 'paper', label: 'Light Paper' },
-                      { id: 'slate', label: 'Slate' },
+                      { id: 'paper', label: 'White Paper' },
+                      { id: 'slate', label: 'Soft Tint' },
+                      { id: 'midnight', label: 'Dark Slate' },
                     ] as Array<{ id: ProofSurface; label: string }>
                   ).map((surface) => (
                     <button
@@ -268,8 +286,8 @@ export const ConceptStage: React.FC<ConceptStageProps> = ({
                       onClick={() => setProofSurface(surface.id)}
                       className={`h-8 px-3 rounded-md text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
                         proofSurface === surface.id
-                          ? 'bg-[#1E2128] text-[#F3F4F6]'
-                          : 'text-[#9CA3AF] hover:text-[#F3F4F6]'
+                          ? 'bg-white text-slate-900 shadow-sm'
+                          : 'text-slate-600 hover:text-slate-900'
                       }`}
                     >
                       {surface.label}
@@ -278,16 +296,16 @@ export const ConceptStage: React.FC<ConceptStageProps> = ({
                 </div>
               </div>
 
-              <p className="text-sm text-[#9CA3AF] leading-relaxed max-w-2xl">
-                Proof how this mark holds contrast across dark charcoal and daylight paper surfaces, download the master PNG, or send it to the Motion Stage to render a 16:9 or 9:16 animated reveal.
+              <p className="text-sm text-slate-600 leading-relaxed max-w-2xl">
+                Proof how this mark holds contrast across light paper, soft tint, and dark surfaces, download the master artwork, or send it to the Motion Stage to render a 16:9 or 9:16 animated reveal.
               </p>
             </div>
 
-            <div className="flex flex-wrap items-center gap-3 pt-4 border-t border-white/[0.08]">
+            <div className="flex flex-wrap items-center gap-3 pt-4 border-t border-slate-200">
               <button
                 type="button"
                 onClick={() => onSendToMotion(selectedAsset)}
-                className="h-10 px-5 rounded-lg bg-[#E5A93C] hover:bg-[#EDB955] text-[#101114] text-sm font-semibold inline-flex items-center gap-2 transition-colors whitespace-nowrap shrink-0"
+                className="h-10 px-5 rounded-lg bg-[#4F46E5] hover:bg-[#4338CA] text-white text-sm font-semibold inline-flex items-center gap-2 transition-colors whitespace-nowrap shrink-0"
               >
                 <Film className="w-4 h-4" />
                 <span>Animate Selected Logo</span>
@@ -302,7 +320,7 @@ export const ConceptStage: React.FC<ConceptStageProps> = ({
                     `${selectedAsset.companyName.toLowerCase().replace(/\s+/g, '-') || 'logo'}-${selectedAsset.resolutionLabel}.png`
                   )
                 }
-                className="h-10 px-4 rounded-lg bg-[#1E2128] border border-white/[0.12] hover:border-white/[0.25] text-sm font-medium text-[#F3F4F6] inline-flex items-center gap-2 transition-colors whitespace-nowrap shrink-0"
+                className="h-10 px-4 rounded-lg bg-white border border-slate-200 hover:border-slate-300 text-sm font-medium text-slate-800 inline-flex items-center gap-2 transition-colors whitespace-nowrap shrink-0"
               >
                 <Download className="w-4 h-4" />
                 <span>Download PNG ({selectedAsset.resolutionLabel})</span>
@@ -317,7 +335,7 @@ export const ConceptStage: React.FC<ConceptStageProps> = ({
                       `${selectedAsset.companyName.toLowerCase().replace(/\s+/g, '-') || 'logo'}.svg`
                     )
                   }
-                  className="h-10 px-4 rounded-lg bg-[#1E2128] border border-white/[0.12] hover:border-white/[0.25] text-sm font-medium text-[#F3F4F6] inline-flex items-center gap-2 transition-colors whitespace-nowrap shrink-0"
+                  className="h-10 px-4 rounded-lg bg-white border border-slate-200 hover:border-slate-300 text-sm font-medium text-slate-800 inline-flex items-center gap-2 transition-colors whitespace-nowrap shrink-0"
                 >
                   <Download className="w-4 h-4" />
                   <span>Download SVG</span>

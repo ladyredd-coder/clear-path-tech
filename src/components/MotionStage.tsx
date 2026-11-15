@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import {
   AnimationAsset,
+  AnimationEasing,
   EngineMode,
   LogoAsset,
   MOTION_PRESETS,
@@ -29,6 +30,8 @@ interface MotionStageProps {
   onChangeAspectRatio: (ratio: VideoAspectRatio) => void;
   duration: '5s' | '8s' | '10s';
   onChangeDuration: (duration: '5s' | '8s' | '10s') => void;
+  easing: AnimationEasing;
+  onChangeEasing: (easing: AnimationEasing) => void;
   motionPresetId: MotionPresetId;
   onSelectMotionPreset: (presetId: MotionPresetId) => void;
   motionPrompt: string;
@@ -58,6 +61,8 @@ export const MotionStage: React.FC<MotionStageProps> = ({
   onChangeAspectRatio,
   duration,
   onChangeDuration,
+  easing,
+  onChangeEasing,
   motionPresetId,
   onSelectMotionPreset,
   motionPrompt,
@@ -85,17 +90,17 @@ export const MotionStage: React.FC<MotionStageProps> = ({
 
   return (
     <section className="flex-1 flex flex-col lg:flex-row min-w-0">
-      <aside className="w-full lg:w-[380px] shrink-0 border-b lg:border-b-0 lg:border-r border-white/[0.08] bg-[#17191E] p-6 flex flex-col gap-6">
+      <aside className="w-full lg:w-[380px] shrink-0 border-b lg:border-b-0 lg:border-r border-slate-200 bg-white p-6 flex flex-col gap-6">
         <div className="flex flex-col gap-2">
-          <span className="text-xs font-medium text-[#9CA3AF]">Animation Engine</span>
-          <div className="grid grid-cols-2 gap-1 p-1 rounded-lg bg-[#101114] border border-white/[0.08]">
+          <span className="text-xs font-medium text-slate-600">Animation Engine</span>
+          <div className="grid grid-cols-2 gap-1 p-1 rounded-lg bg-[#F1F5F9] border border-slate-200">
             <button
               type="button"
               onClick={() => onChangeEngineMode('free')}
               className={`h-8 px-2 rounded-md text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
                 engineMode === 'free'
-                  ? 'bg-[#E5A93C] text-[#101114] font-semibold'
-                  : 'text-[#9CA3AF] hover:text-[#F3F4F6]'
+                  ? 'bg-white text-[#4F46E5] font-semibold shadow-sm border border-slate-200'
+                  : 'text-slate-600 hover:text-slate-900'
               }`}
             >
               Free Key · Canvas
@@ -105,8 +110,8 @@ export const MotionStage: React.FC<MotionStageProps> = ({
               onClick={() => onChangeEngineMode('paid')}
               className={`h-8 px-2 rounded-md text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
                 engineMode === 'paid'
-                  ? 'bg-[#E5A93C] text-[#101114] font-semibold'
-                  : 'text-[#9CA3AF] hover:text-[#F3F4F6]'
+                  ? 'bg-white text-[#4F46E5] font-semibold shadow-sm border border-slate-200'
+                  : 'text-slate-600 hover:text-slate-900'
               }`}
             >
               Paid Key · Omni AI
@@ -115,13 +120,13 @@ export const MotionStage: React.FC<MotionStageProps> = ({
         </div>
 
         <div className="flex items-baseline justify-between gap-4">
-          <h2 className="font-display text-base font-semibold text-[#F3F4F6]">
+          <h2 className="font-display text-base font-semibold text-slate-900">
             Motion Controls
           </h2>
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            className="text-xs font-medium text-[#E5A93C] hover:text-[#EDB955] inline-flex items-center gap-1.5 whitespace-nowrap shrink-0"
+            className="text-xs font-medium text-[#4F46E5] hover:text-[#4338CA] inline-flex items-center gap-1.5 whitespace-nowrap shrink-0"
           >
             <Upload className="w-3.5 h-3.5" />
             <span>Upload Photo</span>
@@ -142,20 +147,20 @@ export const MotionStage: React.FC<MotionStageProps> = ({
         </div>
 
         <div className="flex flex-col gap-2">
-          <span className="text-xs font-medium text-[#9CA3AF]">Source Mark</span>
+          <span className="text-xs font-medium text-slate-600">Source Mark</span>
           {selectedLogo ? (
-            <div className="p-3 rounded-lg bg-[#101114] border border-white/[0.08] flex items-center gap-3">
+            <div className="p-3 rounded-lg bg-[#F8FAFC] border border-slate-200 flex items-center gap-3">
               <img
                 src={selectedLogo.dataUrl}
                 alt={selectedLogo.variationLabel}
                 referrerPolicy="no-referrer"
-                className="w-12 h-12 rounded object-contain bg-[#17191E] border border-white/[0.06] p-1 shrink-0"
+                className="w-12 h-12 rounded object-contain bg-white border border-slate-200 p-1 shrink-0"
               />
               <div className="min-w-0 flex-1">
-                <div className="text-xs font-semibold text-[#F3F4F6] truncate">
+                <div className="text-xs font-semibold text-slate-900 truncate">
                   {selectedLogo.companyName || 'Uploaded Artwork'}
                 </div>
-                <div className="mt-0.5 text-[11px] text-[#9CA3AF] truncate">
+                <div className="mt-0.5 text-[11px] text-slate-500 truncate">
                   {selectedLogo.variationLabel} · {selectedLogo.resolutionLabel}
                 </div>
               </div>
@@ -164,10 +169,10 @@ export const MotionStage: React.FC<MotionStageProps> = ({
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="p-4 rounded-lg border border-dashed border-white/[0.14] bg-[#101114]/60 hover:border-[#E5A93C] text-left transition-colors"
+              className="p-4 rounded-lg border border-dashed border-slate-300 bg-[#F8FAFC] hover:border-[#4F46E5] text-left transition-colors"
             >
-              <div className="text-xs font-medium text-[#F3F4F6]">No logo selected</div>
-              <div className="mt-0.5 text-[11px] text-[#9CA3AF]">
+              <div className="text-xs font-medium text-slate-900">No logo selected</div>
+              <div className="mt-0.5 text-[11px] text-slate-500">
                 Click to upload a photo or generate logos in Concept Studio.
               </div>
             </button>
@@ -183,10 +188,10 @@ export const MotionStage: React.FC<MotionStageProps> = ({
                     type="button"
                     onClick={() => onSelectLogo(logo)}
                     title={`${logo.companyName} — ${logo.variationLabel}`}
-                    className={`w-11 h-11 rounded-md border bg-[#101114] p-1 shrink-0 transition-colors ${
+                    className={`w-11 h-11 rounded-md border bg-white p-1 shrink-0 transition-colors ${
                       active
-                        ? 'border-[#E5A93C]'
-                        : 'border-white/[0.08] hover:border-white/[0.25]'
+                        ? 'border-[#4F46E5] ring-2 ring-[#4F46E5]/20'
+                        : 'border-slate-200 hover:border-slate-300'
                     }`}
                   >
                     <img
@@ -204,15 +209,15 @@ export const MotionStage: React.FC<MotionStageProps> = ({
 
         <div className="grid grid-cols-2 gap-4">
           <div className="flex flex-col gap-2">
-            <span className="text-xs font-medium text-[#9CA3AF]">Aspect Ratio</span>
-            <div className="grid grid-cols-2 gap-1 p-1 rounded-lg bg-[#101114] border border-white/[0.08]">
+            <span className="text-xs font-medium text-slate-600">Aspect Ratio</span>
+            <div className="grid grid-cols-2 gap-1 p-1 rounded-lg bg-[#F1F5F9] border border-slate-200">
               <button
                 type="button"
                 onClick={() => onChangeAspectRatio('16:9')}
                 className={`h-9 rounded-md font-mono text-xs font-medium tabular-nums inline-flex items-center justify-center gap-1.5 transition-colors whitespace-nowrap shrink-0 ${
                   aspectRatio === '16:9'
-                    ? 'bg-[#E5A93C] text-[#101114]'
-                    : 'text-[#9CA3AF] hover:text-[#F3F4F6]'
+                    ? 'bg-[#4F46E5] text-white'
+                    : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
                 <Monitor className="w-3.5 h-3.5" />
@@ -223,8 +228,8 @@ export const MotionStage: React.FC<MotionStageProps> = ({
                 onClick={() => onChangeAspectRatio('9:16')}
                 className={`h-9 rounded-md font-mono text-xs font-medium tabular-nums inline-flex items-center justify-center gap-1.5 transition-colors whitespace-nowrap shrink-0 ${
                   aspectRatio === '9:16'
-                    ? 'bg-[#E5A93C] text-[#101114]'
-                    : 'text-[#9CA3AF] hover:text-[#F3F4F6]'
+                    ? 'bg-[#4F46E5] text-white'
+                    : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
                 <Smartphone className="w-3.5 h-3.5" />
@@ -234,8 +239,8 @@ export const MotionStage: React.FC<MotionStageProps> = ({
           </div>
 
           <div className="flex flex-col gap-2">
-            <span className="text-xs font-medium text-[#9CA3AF]">Clip Length</span>
-            <div className="grid grid-cols-3 gap-1 p-1 rounded-lg bg-[#101114] border border-white/[0.08]">
+            <span className="text-xs font-medium text-slate-600">Clip Length</span>
+            <div className="grid grid-cols-3 gap-1 p-1 rounded-lg bg-[#F1F5F9] border border-slate-200">
               {(['5s', '8s', '10s'] as const).map((len) => (
                 <button
                   key={len}
@@ -243,8 +248,8 @@ export const MotionStage: React.FC<MotionStageProps> = ({
                   onClick={() => onChangeDuration(len)}
                   className={`h-9 rounded-md font-mono text-xs font-medium tabular-nums transition-colors whitespace-nowrap shrink-0 ${
                     duration === len
-                      ? 'bg-[#1E2128] text-[#F3F4F6] border border-white/[0.14]'
-                      : 'text-[#9CA3AF] hover:text-[#F3F4F6]'
+                      ? 'bg-white text-slate-900 border border-slate-200 shadow-sm'
+                      : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
                   {len}
@@ -255,7 +260,39 @@ export const MotionStage: React.FC<MotionStageProps> = ({
         </div>
 
         <div className="flex flex-col gap-2">
-          <span className="text-xs font-medium text-[#9CA3AF]">Motion Direction</span>
+          <span className="text-xs font-medium text-slate-600">Animation Easing</span>
+          <div
+            className="grid grid-cols-4 gap-1 p-1 rounded-lg bg-[#F1F5F9] border border-slate-200"
+            role="group"
+            aria-label="Animation Easing"
+          >
+            {(
+              [
+                { id: 'ease-in', label: 'Ease In' },
+                { id: 'ease-out', label: 'Ease Out' },
+                { id: 'linear', label: 'Linear' },
+                { id: 'bouncy', label: 'Bouncy' },
+              ] as Array<{ id: AnimationEasing; label: string }>
+            ).map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                aria-pressed={easing === option.id}
+                onClick={() => onChangeEasing(option.id)}
+                className={`h-9 px-1.5 rounded-md text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
+                  easing === option.id
+                    ? 'bg-[#4F46E5] text-white font-semibold'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <span className="text-xs font-medium text-slate-600">Motion Direction</span>
           <div className="grid grid-cols-2 gap-2.5">
             {MOTION_PRESETS.map((preset) => {
               const selected = motionPresetId === preset.id;
@@ -266,12 +303,12 @@ export const MotionStage: React.FC<MotionStageProps> = ({
                   onClick={() => onSelectMotionPreset(preset.id)}
                   className={`text-left p-3 rounded-lg border transition-colors ${
                     selected
-                      ? 'bg-[#1E2128] border-[#E5A93C]'
-                      : 'bg-[#101114]/60 border-white/[0.08] hover:border-white/[0.18]'
+                      ? 'bg-[#EEF2FF] border-[#4F46E5]'
+                      : 'bg-[#F8FAFC] border-slate-200 hover:border-slate-300'
                   }`}
                 >
-                  <div className="text-xs font-semibold text-[#F3F4F6]">{preset.label}</div>
-                  <div className="mt-1 text-[11px] leading-snug text-[#9CA3AF]">
+                  <div className="text-xs font-semibold text-slate-900">{preset.label}</div>
+                  <div className="mt-1 text-[11px] leading-snug text-slate-500">
                     {preset.subtitle}
                   </div>
                 </button>
@@ -281,7 +318,7 @@ export const MotionStage: React.FC<MotionStageProps> = ({
         </div>
 
         <div className="flex flex-col gap-2">
-          <label htmlFor="motion-prompt" className="text-xs font-medium text-[#9CA3AF]">
+          <label htmlFor="motion-prompt" className="text-xs font-medium text-slate-600">
             Animation Prompt
           </label>
           <textarea
@@ -290,7 +327,7 @@ export const MotionStage: React.FC<MotionStageProps> = ({
             value={motionPrompt}
             onChange={(e) => onChangeMotionPrompt(e.target.value)}
             placeholder="Describe how your logo animates, lights up, or reveals..."
-            className="p-3.5 rounded-lg bg-[#101114] border border-white/[0.1] text-sm text-[#F3F4F6] placeholder:text-[#6B7280] leading-relaxed resize-none focus:outline-none focus:border-[#E5A93C] transition-colors"
+            className="p-3.5 rounded-lg bg-[#F8FAFC] border border-slate-200 text-sm text-slate-900 placeholder:text-slate-400 leading-relaxed resize-none focus:outline-none focus:border-[#4F46E5] focus:bg-white transition-colors"
           />
         </div>
 
@@ -298,7 +335,7 @@ export const MotionStage: React.FC<MotionStageProps> = ({
           <button
             type="button"
             onClick={onCancelAnimation}
-            className="h-11 px-4 rounded-lg bg-[#1E2128] border border-white/[0.14] hover:border-red-400/60 text-sm font-semibold text-[#F3F4F6] flex items-center justify-center gap-2 transition-colors whitespace-nowrap shrink-0"
+            className="h-11 px-4 rounded-lg bg-white border border-slate-300 hover:border-red-400 text-sm font-semibold text-slate-800 flex items-center justify-center gap-2 transition-colors whitespace-nowrap shrink-0"
           >
             <span>Cancel Render</span>
           </button>
@@ -307,7 +344,7 @@ export const MotionStage: React.FC<MotionStageProps> = ({
             type="button"
             disabled={!canGenerate}
             onClick={onGenerateAnimation}
-            className="h-11 px-4 rounded-lg bg-[#E5A93C] hover:bg-[#EDB955] disabled:opacity-45 disabled:pointer-events-none text-[#101114] text-sm font-semibold flex items-center justify-center gap-2 transition-colors whitespace-nowrap shrink-0"
+            className="h-11 px-4 rounded-lg bg-[#4F46E5] hover:bg-[#4338CA] disabled:opacity-45 disabled:pointer-events-none text-white text-sm font-semibold flex items-center justify-center gap-2 transition-colors whitespace-nowrap shrink-0"
           >
             <Film className="w-4 h-4 shrink-0" />
             <span>Generate Animation</span>
@@ -317,23 +354,25 @@ export const MotionStage: React.FC<MotionStageProps> = ({
 
       <div className="flex-1 studio-grid-bg p-6 lg:p-10 flex flex-col items-center justify-center gap-6 min-w-0">
         <div className="w-full max-w-4xl flex flex-col gap-4 items-center">
-          <div className="w-full flex items-center justify-between gap-4 text-xs text-[#9CA3AF]">
+          <div className="w-full flex items-center justify-between gap-4 text-xs text-slate-500">
             <div className="flex items-center gap-2">
-              <span className="font-medium text-[#F3F4F6]">Motion Preview Stage</span>
+              <span className="font-medium text-slate-900">Motion Preview Stage</span>
               <span aria-hidden="true">·</span>
               <span className="font-mono tabular-nums">{aspectRatio}</span>
               <span aria-hidden="true">·</span>
               <span className="font-mono tabular-nums">{duration}</span>
+              <span aria-hidden="true">·</span>
+              <span className="capitalize">{easing}</span>
             </div>
             {animationStatus === 'processing' && (
-              <div className="font-mono tabular-nums text-[#E5A93C]">
+              <div className="font-mono tabular-nums text-[#4F46E5] font-medium">
                 Elapsed {formatSeconds(elapsedSeconds)}
               </div>
             )}
           </div>
 
           <div
-            className={`relative rounded-xl border border-white/[0.1] bg-[#0B0C0E] overflow-hidden flex items-center justify-center transition-all ${
+            className={`relative rounded-xl border border-slate-200 bg-white overflow-hidden flex items-center justify-center transition-all shadow-sm ${
               aspectRatio === '16:9'
                 ? 'w-full aspect-video'
                 : 'w-full max-w-[360px] aspect-[9/16]'
@@ -348,7 +387,7 @@ export const MotionStage: React.FC<MotionStageProps> = ({
                 autoPlay
                 loop={isLooping}
                 playsInline
-                className="w-full h-full object-contain bg-black"
+                className="w-full h-full object-contain bg-slate-950"
               />
             ) : selectedLogo ? (
               <>
@@ -361,12 +400,12 @@ export const MotionStage: React.FC<MotionStageProps> = ({
                   }`}
                 />
                 {isBusy && (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-center bg-[#101114]/55 backdrop-blur-[2px]">
-                    <Loader2 className="w-7 h-7 text-[#E5A93C] animate-spin" />
-                    <div className="text-sm font-medium text-[#F3F4F6]">
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-center bg-white/80 backdrop-blur-[2px]">
+                    <Loader2 className="w-7 h-7 text-[#4F46E5] animate-spin" />
+                    <div className="text-sm font-medium text-slate-900">
                       Rendering animated brand reveal...
                     </div>
-                    <div className="font-mono text-xs tabular-nums text-[#9CA3AF]">
+                    <div className="font-mono text-xs tabular-nums text-slate-600">
                       {aspectRatio} · {duration} · {formatSeconds(elapsedSeconds)}
                     </div>
                   </div>
@@ -374,11 +413,11 @@ export const MotionStage: React.FC<MotionStageProps> = ({
               </>
             ) : (
               <div className="p-8 text-center flex flex-col items-center gap-3 max-w-sm">
-                <Film className="w-7 h-7 text-[#6B7280]" />
-                <div className="text-sm font-medium text-[#F3F4F6]">
+                <Film className="w-7 h-7 text-slate-400" />
+                <div className="text-sm font-medium text-slate-900">
                   Select or upload a logo to animate
                 </div>
-                <p className="text-xs text-[#9CA3AF] leading-relaxed">
+                <p className="text-xs text-slate-500 leading-relaxed">
                   Choose any generated concept from Concept Studio or upload a PNG, JPG, or WebP mark to render a {aspectRatio} animation.
                 </p>
               </div>
@@ -386,12 +425,12 @@ export const MotionStage: React.FC<MotionStageProps> = ({
           </div>
 
           {animationStatus === 'failed' && animationError && (
-            <div className="w-full p-4 rounded-lg border border-red-500/30 bg-red-500/10 flex flex-wrap items-center justify-between gap-4">
-              <p className="text-xs text-red-300 leading-relaxed">{animationError}</p>
+            <div className="w-full p-4 rounded-lg border border-red-200 bg-red-50 flex flex-wrap items-center justify-between gap-4">
+              <p className="text-xs text-red-700 leading-relaxed">{animationError}</p>
               <button
                 type="button"
                 onClick={onGenerateAnimation}
-                className="h-9 px-3.5 rounded-lg bg-[#1E2128] border border-white/[0.12] hover:border-[#E5A93C] text-xs font-medium text-[#F3F4F6] whitespace-nowrap shrink-0"
+                className="h-9 px-3.5 rounded-lg bg-white border border-red-200 hover:border-red-400 text-xs font-medium text-red-700 whitespace-nowrap shrink-0"
               >
                 Retry Animation
               </button>
@@ -399,12 +438,12 @@ export const MotionStage: React.FC<MotionStageProps> = ({
           )}
 
           {activeAnimation && animationStatus === 'completed' && (
-            <div className="w-full p-4 rounded-xl border border-white/[0.08] bg-[#17191E] flex flex-wrap items-center justify-between gap-4">
+            <div className="w-full p-4 rounded-xl border border-slate-200 bg-white flex flex-wrap items-center justify-between gap-4">
               <div className="min-w-0">
-                <div className="text-sm font-semibold text-[#F3F4F6] truncate">
+                <div className="text-sm font-semibold text-slate-900 truncate">
                   {activeAnimation.companyName || 'Brand'} — {activeAnimation.motionPresetLabel}
                 </div>
-                <div className="mt-0.5 flex items-center gap-2 text-xs text-[#9CA3AF]">
+                <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-500">
                   <span className="font-mono tabular-nums">{activeAnimation.aspectRatio}</span>
                   <span aria-hidden="true">·</span>
                   <span className="font-mono tabular-nums">{activeAnimation.duration}</span>
@@ -419,8 +458,8 @@ export const MotionStage: React.FC<MotionStageProps> = ({
                   onClick={() => setIsLooping((prev) => !prev)}
                   className={`h-9 px-3 rounded-lg border text-xs font-medium inline-flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 ${
                     isLooping
-                      ? 'bg-[#1E2128] border-[#E5A93C]/60 text-[#E5A93C]'
-                      : 'bg-[#101114] border-white/[0.1] text-[#9CA3AF] hover:text-[#F3F4F6]'
+                      ? 'bg-[#EEF2FF] border-indigo-200 text-[#4F46E5]'
+                      : 'bg-white border-slate-200 text-slate-600 hover:text-slate-900'
                   }`}
                 >
                   <Repeat className="w-3.5 h-3.5" />
@@ -430,7 +469,7 @@ export const MotionStage: React.FC<MotionStageProps> = ({
                 <button
                   type="button"
                   onClick={handleReplay}
-                  className="h-9 px-3 rounded-lg bg-[#1E2128] border border-white/[0.1] hover:border-white/[0.25] text-xs font-medium text-[#F3F4F6] inline-flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0"
+                  className="h-9 px-3 rounded-lg bg-white border border-slate-200 hover:border-slate-300 text-xs font-medium text-slate-800 inline-flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
                   <span>Replay</span>
@@ -443,7 +482,7 @@ export const MotionStage: React.FC<MotionStageProps> = ({
                       : `${activeAnimation.videoUrl}?download=1`
                   }
                   download={`forma-logo-animation.${activeAnimation.fileExtension}`}
-                  className="h-9 px-4 rounded-lg bg-[#E5A93C] hover:bg-[#EDB955] text-[#101114] text-xs font-semibold inline-flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0"
+                  className="h-9 px-4 rounded-lg bg-[#4F46E5] hover:bg-[#4338CA] text-white text-xs font-semibold inline-flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0"
                 >
                   <Download className="w-3.5 h-3.5" />
                   <span>Download {activeAnimation.fileExtension.toUpperCase()}</span>

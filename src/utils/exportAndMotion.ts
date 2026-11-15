@@ -1,4 +1,9 @@
-import { ImageResolution, MotionChoreography, VideoAspectRatio } from '../types/studio';
+import {
+  AnimationEasing,
+  ImageResolution,
+  MotionChoreography,
+  VideoAspectRatio,
+} from '../types/studio';
 
 function triggerBlobDownload(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
@@ -77,8 +82,44 @@ export async function rasterizeToPngDataUrl(
   };
 }
 
+function easeInCubic(t: number): number {
+  return t * t * t;
+}
+
 function easeOutCubic(t: number): number {
   return 1 - Math.pow(1 - t, 3);
+}
+
+function easeOutBounce(t: number): number {
+  const n1 = 7.5625;
+  const d1 = 2.75;
+  if (t < 1 / d1) {
+    return n1 * t * t;
+  } else if (t < 2 / d1) {
+    const x = t - 1.5 / d1;
+    return n1 * x * x + 0.75;
+  } else if (t < 2.5 / d1) {
+    const x = t - 2.25 / d1;
+    return n1 * x * x + 0.9375;
+  } else {
+    const x = t - 2.625 / d1;
+    return n1 * x * x + 0.984375;
+  }
+}
+
+function applyEasing(t: number, easing: AnimationEasing): number {
+  const clamped = Math.max(0, Math.min(1, t));
+  switch (easing) {
+    case 'ease-in':
+      return easeInCubic(clamped);
+    case 'linear':
+      return clamped;
+    case 'bouncy':
+      return easeOutBounce(clamped);
+    case 'ease-out':
+    default:
+      return easeOutCubic(clamped);
+  }
 }
 
 function easeInOutSine(t: number): number {
@@ -104,13 +145,22 @@ export async function renderFreeMotionVideo(params: {
   imageUrl: string;
   aspectRatio: VideoAspectRatio;
   duration: '5s' | '8s' | '10s';
+  easing?: AnimationEasing;
   choreography: MotionChoreography;
   companyName: string;
   onProgress?: (elapsedSec: number) => void;
   signal?: AbortSignal;
 }): Promise<{ videoUrl: string; mimeType: string; fileExtension: 'mp4' | 'webm' }> {
-  const { imageUrl, aspectRatio, duration, choreography, companyName, onProgress, signal } =
-    params;
+  const {
+    imageUrl,
+    aspectRatio,
+    duration,
+    easing = 'ease-out',
+    choreography,
+    companyName,
+    onProgress,
+    signal,
+  } = params;
 
   if (typeof MediaRecorder === 'undefined') {
     throw new Error('This browser does not support video recording via MediaRecorder.');
@@ -239,7 +289,7 @@ export async function renderFreeMotionVideo(params: {
 
     // 4. Logo motion transform
     const enterT = Math.max(0, Math.min(1, progress / 0.35));
-    const enterEase = easeOutCubic(enterT);
+    const enterEase = applyEasing(enterT, easing);
     const holdT = Math.max(0, (progress - 0.35) / 0.65);
 
     let scale = 1;
@@ -248,16 +298,18 @@ export async function renderFreeMotionVideo(params: {
 
     if (choreography.entranceStyle === 'assemble') {
       scale = 0.78 + 0.22 * enterEase + 0.03 * holdT;
-      alpha = enterEase;
+      alpha = Math.min(1, enterT * 1.4);
       rotRad = ((1 - enterEase) * choreography.rotationDeg * Math.PI) / 180;
     } else if (choreography.entranceStyle === 'fluid') {
       scale = 0.9 + 0.1 * enterEase + 0.04 * holdT;
-      alpha = enterEase;
+      alpha = Math.min(1, enterT * 1.4);
     } else if (choreography.entranceStyle === 'sweep') {
       scale = 0.96 + 0.04 * enterEase + 0.04 * holdT;
-      alpha = Math.min(1, enterEase * 1.15);
+      alpha = Math.min(1, enterT * 1.5);
     } else {
-      scale = 0.92 + (choreography.zoomScale - 0.92) * easeInOutSine(progress);
+      const showcaseEase =
+        easing === 'linear' ? progress : applyEasing(progress, easing);
+      scale = 0.92 + (choreography.zoomScale - 0.92) * showcaseEase;
       alpha = Math.min(1, progress / 0.22);
     }
 
@@ -268,10 +320,11 @@ export async function renderFreeMotionVideo(params: {
     ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
 
     if (choreography.entranceStyle === 'fluid' && progress < 0.45) {
-      const revealRadius = Math.max(
-        0,
-        Math.max(logoW, logoH) * 0.85 * easeOutCubic(Math.max(0, Math.min(1, progress / 0.45)))
+      const revealEase = applyEasing(
+        Math.max(0, Math.min(1, progress / 0.45)),
+        easing
       );
+      const revealRadius = Math.max(0, Math.max(logoW, logoH) * 0.85 * revealEase);
       ctx.beginPath();
       ctx.arc(0, 0, revealRadius, 0, Math.PI * 2);
       ctx.clip();
@@ -281,7 +334,8 @@ export async function renderFreeMotionVideo(params: {
 
     // 5. Studio rim light sweep
     if (progress > 0.18 && progress < 0.85) {
-      const sweepProgress = (progress - 0.18) / 0.67;
+      const rawSweep = (progress - 0.18) / 0.67;
+      const sweepProgress = applyEasing(rawSweep, easing);
       const sweepSpan = logoW * 1.8;
       const sweepX = -sweepSpan / 2 + sweepSpan * sweepProgress;
       ctx.save();

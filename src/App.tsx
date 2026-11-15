@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import { MessageSquare } from 'lucide-react';
+import { BrandGuideChat } from './components/BrandGuideChat';
 import { BriefRail } from './components/BriefRail';
 import { ConceptStage } from './components/ConceptStage';
 import { MotionStage } from './components/MotionStage';
@@ -6,6 +8,7 @@ import { SessionReel } from './components/SessionReel';
 import { StudioView, TopBar } from './components/TopBar';
 import {
   AnimationAsset,
+  AnimationEasing,
   BrandBrief,
   CONCEPT_VARIATIONS,
   ConceptSlot,
@@ -15,6 +18,7 @@ import {
   MOTION_PRESETS,
   MotionChoreography,
   MotionPresetId,
+  SuggestedBrief,
   VideoAspectRatio,
 } from './types/studio';
 import {
@@ -39,6 +43,7 @@ export default function App() {
   const [engineMode, setEngineMode] = useState<EngineMode>('free');
   const [activeView, setActiveView] = useState<StudioView>('concepts');
   const [brief, setBrief] = useState<BrandBrief>(DEFAULT_BRIEF);
+  const [isChatOpen, setIsChatOpen] = useState(false);
 
   const [slots, setSlots] = useState<ConceptSlot[]>([]);
   const [logos, setLogos] = useState<LogoAsset[]>([]);
@@ -47,6 +52,7 @@ export default function App() {
 
   const [aspectRatio, setAspectRatio] = useState<VideoAspectRatio>('16:9');
   const [duration, setDuration] = useState<'5s' | '8s' | '10s'>('5s');
+  const [animationEasing, setAnimationEasing] = useState<AnimationEasing>('ease-out');
   const [motionPresetId, setMotionPresetId] = useState<MotionPresetId>('kinetic-assembly');
   const [motionPrompt, setMotionPrompt] = useState<string>(() =>
     MOTION_PRESETS[0].buildPrompt('')
@@ -189,6 +195,31 @@ export default function App() {
     }
   };
 
+  const handleApplySuggestedBrief = (
+    suggested: SuggestedBrief,
+    autoGenerate: boolean
+  ) => {
+    const updated: BrandBrief = {
+      ...brief,
+      companyName: suggested.companyName || brief.companyName,
+      description: suggested.description || brief.description,
+      stylePreset: suggested.stylePreset || brief.stylePreset,
+      paletteHint: suggested.paletteHint || brief.paletteHint,
+    };
+    setBrief(updated);
+    setMotionPrompt(
+      (
+        MOTION_PRESETS.find((p) => p.id === motionPresetId) || MOTION_PRESETS[0]
+      ).buildPrompt(updated.companyName)
+    );
+    setIsChatOpen(false);
+    if (autoGenerate) {
+      handleGenerateConcepts(updated);
+    } else {
+      setActiveView('concepts');
+    }
+  };
+
   const handleLoadSample = (sampleKey: 'orbital' | 'vesper') => {
     const sampleBrief: BrandBrief =
       sampleKey === 'orbital'
@@ -197,7 +228,7 @@ export default function App() {
             description:
               'Autonomous orbital logistics and precision satellite servicing platform. Sharp trajectory lines, falcon wing geometry, and high-altitude engineering.',
             stylePreset: 'minimalist-geometric',
-            paletteHint: 'Deep space charcoal, crisp platinum white, and signal amber',
+            paletteHint: 'Deep indigo, crisp white, and bright sky blue',
             imageSize: brief.imageSize,
             conceptCount: brief.conceptCount,
           }
@@ -206,7 +237,7 @@ export default function App() {
             description:
               'Botanical evening fragrance and bespoke glass apothecary studio. Crescent moon, distilled glass vessels, and timeless architectural elegance.',
             stylePreset: 'heritage-emblem',
-            paletteHint: 'Obsidian black, champagne brass, and warm ivory',
+            paletteHint: 'Slate navy, warm pearl, and sage green',
             imageSize: brief.imageSize,
             conceptCount: brief.conceptCount,
           };
@@ -310,6 +341,7 @@ export default function App() {
         companyName: selectedLogo.companyName,
         aspectRatio,
         duration,
+        easing: animationEasing,
         motionPresetLabel: presetObj.label,
         motionPrompt,
         videoUrl,
@@ -336,9 +368,9 @@ export default function App() {
               : motionPresetId === 'cinema-showcase'
               ? 'showcase'
               : 'assemble',
-          backgroundTop: '#14171D',
-          backgroundBottom: '#08090C',
-          accentColor: '#E5A93C',
+          backgroundTop: '#1E293B',
+          backgroundBottom: '#0F172A',
+          accentColor: '#6366F1',
           glowIntensity: 0.45,
           sweepAngleDeg: 28,
           zoomScale: 1.07,
@@ -365,9 +397,8 @@ export default function App() {
               choreography = choreoData.choreography;
             }
           }
-        } catch (choreoErr) {
+        } catch {
           if (controller.signal.aborted) return;
-          // Use deterministic preset choreography if choreography request fails transiently
         }
 
         if (activeRunIdRef.current !== runId || controller.signal.aborted) return;
@@ -376,6 +407,7 @@ export default function App() {
           imageUrl: selectedLogo.dataUrl,
           aspectRatio,
           duration,
+          easing: animationEasing,
           choreography,
           companyName: selectedLogo.companyName,
           signal: controller.signal,
@@ -404,7 +436,6 @@ export default function App() {
       return;
     }
 
-    // Paid Mode: Gemini Interactions API (gemini-omni-1.2-flash)
     elapsedTimerRef.current = window.setInterval(() => {
       setElapsedSeconds((prev) => prev + 1);
     }, 1000);
@@ -415,13 +446,20 @@ export default function App() {
         selectedLogo.mimeType
       );
 
+      const easingDirectives: Record<AnimationEasing, string> = {
+        'ease-in': 'Use an accelerating ease-in motion curve that builds momentum smoothly.',
+        'ease-out': 'Use a crisp ease-out motion curve with a smooth decelerating settle.',
+        linear: 'Use steady constant-speed linear motion timing throughout.',
+        bouncy: 'Use a lively springy bounce overshoot as elements lock into place.',
+      };
+
       const startRes = await fetch('/api/animate/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           imageBase64: preparedImage.dataUrl,
           mimeType: preparedImage.mimeType,
-          motionPrompt,
+          motionPrompt: `${motionPrompt.trim()} ${easingDirectives[animationEasing]}`.trim(),
           aspectRatio,
           duration,
         }),
@@ -524,7 +562,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#101114] text-[#F3F4F6] flex flex-col">
+    <div className="min-h-screen bg-[#F8FAFC] text-[#0F172A] flex flex-col">
       <TopBar
         activeView={activeView}
         onSelectView={setActiveView}
@@ -534,12 +572,12 @@ export default function App() {
       />
 
       {bannerError && (
-        <div className="px-6 py-3 bg-red-500/10 border-b border-red-500/30 text-xs text-red-300 flex items-center justify-between gap-4">
+        <div className="px-6 py-3 bg-red-50 border-b border-red-200 text-xs text-red-700 flex items-center justify-between gap-4">
           <span>{bannerError}</span>
           <button
             type="button"
             onClick={() => setBannerError(null)}
-            className="text-xs font-medium text-red-200 hover:text-white"
+            className="text-xs font-medium text-red-800 hover:underline"
           >
             Dismiss
           </button>
@@ -558,6 +596,7 @@ export default function App() {
               onUploadFile={handleUploadFile}
               isGenerating={isGeneratingConcepts}
               onLoadSample={handleLoadSample}
+              onOpenChat={() => setIsChatOpen(true)}
             />
             <ConceptStage
               slots={slots}
@@ -567,6 +606,7 @@ export default function App() {
               onSendToMotion={handleSendToMotion}
               onUploadFile={handleUploadFile}
               onLoadSample={handleLoadSample}
+              onOpenChat={() => setIsChatOpen(true)}
             />
           </>
         )}
@@ -590,6 +630,8 @@ export default function App() {
             onChangeAspectRatio={setAspectRatio}
             duration={duration}
             onChangeDuration={setDuration}
+            easing={animationEasing}
+            onChangeEasing={setAnimationEasing}
             motionPresetId={motionPresetId}
             onSelectMotionPreset={handleSelectMotionPreset}
             motionPrompt={motionPrompt}
@@ -613,6 +655,7 @@ export default function App() {
               if (matchingLogo) setSelectedLogo(matchingLogo);
               setAspectRatio(anim.aspectRatio);
               setDuration(anim.duration);
+              if (anim.easing) setAnimationEasing(anim.easing);
               setMotionPrompt(anim.motionPrompt);
               setActiveAnimation(anim);
               setAnimationStatus('completed');
@@ -622,6 +665,24 @@ export default function App() {
           />
         )}
       </main>
+
+      {!isChatOpen && (
+        <button
+          type="button"
+          onClick={() => setIsChatOpen(true)}
+          className="fixed bottom-5 right-5 z-40 h-11 px-4 rounded-xl bg-[#4F46E5] hover:bg-[#4338CA] text-white text-xs font-semibold shadow-lg inline-flex items-center gap-2 transition-colors whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4F46E5] focus-visible:ring-offset-2"
+        >
+          <MessageSquare className="w-4 h-4" />
+          <span>Gemini Brand Guide</span>
+        </button>
+      )}
+
+      <BrandGuideChat
+        isOpen={isChatOpen}
+        onClose={() => setIsChatOpen(false)}
+        currentBrief={brief}
+        onApplyBrief={handleApplySuggestedBrief}
+      />
     </div>
   );
 }

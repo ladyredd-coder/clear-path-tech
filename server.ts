@@ -472,6 +472,138 @@ async function startServer() {
     }
   });
 
+  app.post('/api/chat', async (req: Request, res: Response) => {
+    try {
+      const { messages = [], currentBrief } = req.body as {
+        messages?: Array<{ role: 'user' | 'assistant'; text: string }>;
+        currentBrief?: {
+          companyName?: string;
+          description?: string;
+          stylePreset?: string;
+          paletteHint?: string;
+        };
+      };
+
+      if (!Array.isArray(messages) || messages.length === 0) {
+        res.status(400).json({ error: 'Please send at least one message.' });
+        return;
+      }
+
+      const conversationTranscript = messages
+        .slice(-12)
+        .map((m) => `${m.role === 'user' ? 'Client' : 'Brand Guide'}: ${m.text}`)
+        .join('\n');
+
+      const briefContext = currentBrief
+        ? `Current brief in editor — Company Name: "${currentBrief.companyName || '(blank)'}", Description: "${currentBrief.description || '(blank)'}", Style: "${currentBrief.stylePreset || 'minimalist-geometric'}", Colors: "${currentBrief.paletteHint || '(none)'}".`
+        : '';
+
+      const ai = getAiClient();
+      const response = await ai.models.generateContent({
+        model: 'gemini-4-hydrogen',
+        contents: [
+          briefContext,
+          'Conversation so far:',
+          conversationTranscript,
+          'Respond warmly as the Brand Guide. Keep your reply concise (2–4 friendly sentences). If the client is still unsure, ask 1–2 simple questions (like what they sell, who their customers are, or what feeling they want—modern, cozy, bold, playful). As soon as you have enough information to propose a strong logo direction (or if they ask for ideas), set suggestedBrief.ready = true with concrete, thoughtful values they can apply directly to their brief.',
+        ]
+          .filter(Boolean)
+          .join('\n\n'),
+        config: {
+          systemInstruction:
+            'You are the friendly, welcoming Gemini Brand Guide inside Forma Studio. You help clients who are unsure what they want for their company logo discover clear visual symbols, typography styles, and welcoming color palettes. Never use technical jargon. Valid stylePreset values are strictly: "minimalist-geometric", "heritage-emblem", "dimensional-3d", "illustrated-mascot".',
+          thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              reply: {
+                type: Type.STRING,
+                description: 'Friendly, encouraging conversational response.',
+              },
+              quickPrompts: {
+                type: Type.ARRAY,
+                items: { type: Type.STRING },
+                description: '2 to 3 short clickable follow-up replies the client might tap next.',
+              },
+              suggestedBrief: {
+                type: Type.OBJECT,
+                properties: {
+                  ready: {
+                    type: Type.BOOLEAN,
+                    description: 'True when there is enough context to apply a concrete logo brief.',
+                  },
+                  companyName: { type: Type.STRING },
+                  description: {
+                    type: Type.STRING,
+                    description: 'Rich visual logo description with clear symbols and mood.',
+                  },
+                  stylePreset: {
+                    type: Type.STRING,
+                    description:
+                      'One of: minimalist-geometric, heritage-emblem, dimensional-3d, illustrated-mascot',
+                  },
+                  paletteHint: {
+                    type: Type.STRING,
+                    description: '2 to 3 harmonious colors with friendly mood.',
+                  },
+                },
+                required: ['ready'],
+              },
+            },
+            required: ['reply', 'quickPrompts'],
+          },
+        },
+      });
+
+      const rawText = (response.text ?? '{}').trim();
+      const parsed = JSON.parse(rawText) as {
+        reply?: string;
+        quickPrompts?: string[];
+        suggestedBrief?: {
+          ready?: boolean;
+          companyName?: string;
+          description?: string;
+          stylePreset?: string;
+          paletteHint?: string;
+        };
+      };
+
+      const validStyles = new Set([
+        'minimalist-geometric',
+        'heritage-emblem',
+        'dimensional-3d',
+        'illustrated-mascot',
+      ]);
+
+      const cleanBrief =
+        parsed.suggestedBrief?.ready && parsed.suggestedBrief.description
+          ? {
+              ready: true,
+              companyName: parsed.suggestedBrief.companyName || currentBrief?.companyName || '',
+              description: parsed.suggestedBrief.description,
+              stylePreset: validStyles.has(String(parsed.suggestedBrief.stylePreset))
+                ? parsed.suggestedBrief.stylePreset
+                : 'minimalist-geometric',
+              paletteHint: parsed.suggestedBrief.paletteHint || '',
+            }
+          : undefined;
+
+      res.json({
+        reply:
+          parsed.reply ||
+          'Tell me a little bit about what your company does and the feeling you want customers to get—we will shape a great logo together.',
+        quickPrompts: Array.isArray(parsed.quickPrompts)
+          ? parsed.quickPrompts.slice(0, 3)
+          : [],
+        suggestedBrief: cleanBrief,
+      });
+    } catch (err) {
+      const parsed = formatGeminiError(err);
+      res.status(parsed.status).json({ error: parsed.message });
+    }
+  });
+
   app.post('/api/animate/start', async (req: Request, res: Response) => {
     try {
       const {
