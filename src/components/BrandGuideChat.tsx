@@ -60,19 +60,33 @@ export const BrandGuideChat: React.FC<BrandGuideChatProps> = ({
     setIsSending(true);
 
     try {
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: nextHistory.map((m) => ({ role: m.role, text: m.text })),
-          currentBrief: {
-            companyName: currentBrief.companyName,
-            description: currentBrief.description,
-            stylePreset: currentBrief.stylePreset,
-            paletteHint: currentBrief.paletteHint,
-          },
-        }),
-      });
+      const postChat = () =>
+        fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            messages: nextHistory.map((m) => ({ role: m.role, text: m.text })),
+            currentBrief: {
+              companyName: currentBrief.companyName,
+              description: currentBrief.description,
+              stylePreset: currentBrief.stylePreset,
+              paletteHint: currentBrief.paletteHint,
+            },
+          }),
+        });
+
+      let response: Response;
+      try {
+        response = await postChat();
+      } catch (firstErr) {
+        const msg = firstErr instanceof Error ? firstErr.message.toLowerCase() : '';
+        if (msg.includes('failed to fetch') || msg.includes('network')) {
+          await new Promise((r) => setTimeout(r, 800));
+          response = await postChat();
+        } else {
+          throw firstErr;
+        }
+      }
 
       const data = (await response.json()) as {
         reply?: string;
@@ -94,8 +108,14 @@ export const BrandGuideChat: React.FC<BrandGuideChatProps> = ({
       };
       setMessages((prev) => [...prev, assistantMsg]);
     } catch (err) {
+      const raw = err instanceof Error ? err.message : '';
+      const isNetwork =
+        raw.toLowerCase().includes('failed to fetch') ||
+        raw.toLowerCase().includes('network');
       setChatError(
-        err instanceof Error ? err.message : 'Something went wrong talking to Gemini.'
+        isNetwork
+          ? 'Connection interrupted while reaching Gemini Brand Guide. Please try sending your message again.'
+          : raw || 'Something went wrong talking to Gemini.'
       );
     } finally {
       setIsSending(false);

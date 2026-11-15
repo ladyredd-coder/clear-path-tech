@@ -39,6 +39,25 @@ function formatTimeLabel(): string {
   return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
+function isTransientNetworkError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const msg = err.message.toLowerCase();
+  return (
+    msg.includes('failed to fetch') ||
+    msg.includes('networkerror') ||
+    msg.includes('load failed') ||
+    msg.includes('network request failed') ||
+    msg.includes('body stream')
+  );
+}
+
+function formatClientError(err: unknown, fallback: string): string {
+  if (isTransientNetworkError(err)) {
+    return 'Connection interrupted while reaching the studio server. Please check your connection and tap Retry.';
+  }
+  return err instanceof Error && err.message ? err.message : fallback;
+}
+
 export default function App() {
   const [engineMode, setEngineMode] = useState<EngineMode>('free');
   const [activeView, setActiveView] = useState<StudioView>('concepts');
@@ -68,6 +87,7 @@ export default function App() {
   const pollTimerRef = useRef<number | null>(null);
   const elapsedTimerRef = useRef<number | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const conceptsAbortRef = useRef<AbortController | null>(null);
   const activeRunIdRef = useRef<number>(0);
 
   const stopPollingTimers = () => {
@@ -88,6 +108,7 @@ export default function App() {
   useEffect(() => {
     return () => {
       stopPollingTimers();
+      conceptsAbortRef.current?.abort();
     };
   }, []);
 
@@ -117,20 +138,33 @@ export default function App() {
       const endpoint =
         targetMode === 'free' ? '/api/logos/generate-vector' : '/api/logos/generate';
 
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          companyName: targetBrief.companyName,
-          description: targetBrief.description,
-          stylePreset: targetBrief.stylePreset,
-          paletteHint: targetBrief.paletteHint,
-          imageSize: targetBrief.imageSize,
-          variationIndex: slotIndex,
-          creativeSeed: batchSeed + slotIndex * 7919,
-          avoidConcepts: avoidList,
-        }),
-      });
+      const doFetch = () =>
+        fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            companyName: targetBrief.companyName,
+            description: targetBrief.description,
+            stylePreset: targetBrief.stylePreset,
+            paletteHint: targetBrief.paletteHint,
+            imageSize: targetBrief.imageSize,
+            variationIndex: slotIndex,
+            creativeSeed: batchSeed + slotIndex * 7919,
+            avoidConcepts: avoidList,
+          }),
+        });
+
+      let response: Response;
+      try {
+        response = await doFetch();
+      } catch (firstErr) {
+        if (isTransientNetworkError(firstErr)) {
+          await new Promise((r) => setTimeout(r, 900));
+          response = await doFetch();
+        } else {
+          throw firstErr;
+        }
+      }
 
       const data = (await response.json()) as {
         dataUrl?: string;
@@ -169,10 +203,191 @@ export default function App() {
       setLogos((prev) => [newAsset, ...prev]);
       setSelectedLogo((current) => current ?? newAsset);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Unable to generate logo concept.';
+      const msg = formatClientError(err, 'Unable to generate logo concept.');
       setSlots((prev) =>
         prev.map((slot) =>
           slot.slotIndex === slotIndex
+            ? { ...slot, status: 'error', error: msg }
+            : slot
+        )
+      );
+    }
+  };
+
+  const generateFreeConceptBatch = async (
+    targetBrief: BrandBrief,
+    batchSeed: number,
+    avoidList: string[]
+  ): Promise<void> => {
+    conceptsAbortRef.current?.abort();
+    const controller = new AbortController();
+    conceptsAbortRef.current = controller;
+
+    const styleObj =
+      LOGO_STYLE_PRESETS.find((s) => s.id === targetBrief.stylePreset) ||
+      LOGO_STYLE_PRESETS[0];
+
+    let receivedAnySlot = false;
+
+    const runBatchStream = async () => {
+      const response = await fetch('/api/logos/generate-vector-batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
+        body: JSON.stringify({
+          companyName: targetBrief.companyName,
+          description: targetBrief.description,
+          stylePreset: targetBrief.stylePreset,
+          paletteHint: targetBrief.paletteHint,
+          conceptCount: targetBrief.conceptCount,
+          creativeSeed: batchSeed,
+          avoidConcepts: avoidList,
+        }),
+      });
+
+      if (!response.ok) {
+        let errorMessage = 'Unable to start logo generation.';
+        try {
+          const errJson = (await response.json()) as { error?: string };
+          if (errJson.error) errorMessage = errJson.error;
+        } catch {
+          // ignore non-JSON error body
+        }
+        throw new Error(errorMessage);
+      }
+
+      if (!response.body) {
+        throw new Error('Streaming response body unavailable.');
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      const processEventBlock = (block: string) => {
+        const lines = block.split('\n');
+        let eventName = 'message';
+        const dataLines: string[] = [];
+
+        for (const rawLine of lines) {
+          const line = rawLine.trimEnd();
+          if (!line || line.startsWith(':')) continue;
+          if (line.startsWith('event:')) {
+            eventName = line.slice(6).trim();
+          } else if (line.startsWith('data:')) {
+            dataLines.push(line.slice(5).trim());
+          }
+        }
+
+        if (dataLines.length === 0) return;
+        const payload = JSON.parse(dataLines.join('\n')) as Record<string, unknown>;
+
+        if (eventName === 'slot') {
+          const slotIndex = Number(payload.slotIndex);
+          const dataUrl = String(payload.dataUrl || '');
+          const svgMarkup = payload.svgMarkup ? String(payload.svgMarkup) : undefined;
+          const mimeType = String(payload.mimeType || 'image/svg+xml');
+          const rationale = payload.rationale ? String(payload.rationale) : undefined;
+          const variation = CONCEPT_VARIATIONS[slotIndex % CONCEPT_VARIATIONS.length];
+
+          if (dataUrl) {
+            receivedAnySlot = true;
+            const newAsset: LogoAsset = {
+              id: crypto.randomUUID(),
+              source: 'generated',
+              engine: 'free',
+              dataUrl,
+              svgMarkup,
+              mimeType,
+              companyName: targetBrief.companyName.trim() || 'Untitled Brand',
+              styleLabel: styleObj.label,
+              variationLabel: variation.label,
+              designNote: rationale,
+              resolutionLabel: targetBrief.imageSize,
+              createdAt: formatTimeLabel(),
+            };
+
+            setSlots((prev) =>
+              prev.map((slot) =>
+                slot.slotIndex === slotIndex
+                  ? { ...slot, status: 'ready', asset: newAsset, error: undefined }
+                  : slot
+              )
+            );
+            setLogos((prev) => [newAsset, ...prev]);
+            setSelectedLogo((current) => current ?? newAsset);
+          }
+        } else if (eventName === 'slotError') {
+          const slotIndex = Number(payload.slotIndex);
+          const errorMsg = String(payload.error || 'Unable to generate logo concept.');
+          setSlots((prev) =>
+            prev.map((slot) =>
+              slot.slotIndex === slotIndex
+                ? { ...slot, status: 'error', error: errorMsg }
+                : slot
+            )
+          );
+        } else if (eventName === 'error') {
+          const errorMsg = String(payload.error || 'Logo generation failed.');
+          setBannerError(errorMsg);
+          setSlots((prev) =>
+            prev.map((slot) =>
+              slot.status === 'loading'
+                ? { ...slot, status: 'error', error: errorMsg }
+                : slot
+            )
+          );
+        }
+      };
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const blocks = buffer.split('\n\n');
+        buffer = blocks.pop() ?? '';
+        for (const block of blocks) {
+          processEventBlock(block);
+        }
+      }
+
+      if (buffer.trim()) {
+        processEventBlock(buffer);
+      }
+    };
+
+    try {
+      try {
+        await runBatchStream();
+      } catch (firstErr) {
+        if (
+          !controller.signal.aborted &&
+          !receivedAnySlot &&
+          isTransientNetworkError(firstErr)
+        ) {
+          await new Promise((r) => setTimeout(r, 900));
+          await runBatchStream();
+        } else {
+          throw firstErr;
+        }
+      }
+
+      if (!controller.signal.aborted) {
+        setSlots((prev) =>
+          prev.map((slot) =>
+            slot.status === 'loading'
+              ? { ...slot, status: 'error', error: 'Concept did not finish rendering. Tap Retry Slot.' }
+              : slot
+          )
+        );
+      }
+    } catch (err) {
+      if (controller.signal.aborted) return;
+      const msg = formatClientError(err, 'Unable to generate logo concepts.');
+      setBannerError(msg);
+      setSlots((prev) =>
+        prev.map((slot) =>
+          slot.status === 'loading'
             ? { ...slot, status: 'error', error: msg }
             : slot
         )
@@ -201,6 +416,11 @@ export default function App() {
       .map((l) => l.designNote)
       .filter((n): n is string => Boolean(n && n.trim()))
       .slice(0, 6);
+
+    if (engineMode === 'free') {
+      void generateFreeConceptBatch(activeBrief, batchSeed, recentNotes);
+      return;
+    }
 
     for (let i = 0; i < activeBrief.conceptCount; i++) {
       void generateSingleConcept(activeBrief, engineMode, i, batchSeed, recentNotes);

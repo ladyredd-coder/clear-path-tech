@@ -57,6 +57,7 @@ interface ParsedError {
 function formatGeminiError(err: unknown): ParsedError {
   const rawMessage = err instanceof Error ? err.message : String(err);
   const lower = rawMessage.toLowerCase();
+  console.error('[GeminiError]', rawMessage);
 
   if (rawMessage === 'MISSING_API_KEY') {
     return {
@@ -341,9 +342,9 @@ async function startServer() {
           : 'Color Palette: Choose a fresh, welcoming 2 to 3 color palette tailored to this specific industry and brand mood (avoid defaulting to dark gray/gold unless requested).',
         avoidBlock,
         'Creative & SVG Craftsmanship Rules:',
-        '- Invent a specific, recognizable visual metaphor rooted in the company name and description (e.g., botanical leaves, waves, wings, flames, architectural arches, animals, tools, food, stars, musical forms, etc.). NEVER default to generic concentric circles or plain empty hexagons.',
+        '- Invent a specific, recognizable visual metaphor rooted in the company name and description (e.g., botanical leaves, waves, wings, flames, arches, animals, tools, food, stars, musical forms). NEVER default to generic concentric circles or plain empty hexagons.',
         '- Output a complete standalone <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">.',
-        '- Build expressive, well-proportioned custom vector artwork using smooth Bezier <path> curves, layered shapes, purposeful negative space, <defs> gradients, and crisp <text> only when the variation calls for a wordmark or monogram.',
+        '- Build expressive, well-proportioned vector artwork using 5 to 16 clean <path>, <circle>, <polygon>, <rect>, and <defs> gradient elements (keep path data concise and crisp so it renders rapidly).',
         '- Keep the outer canvas background transparent (do NOT draw a full-bleed 512x512 background square) so the logo looks great on both white paper and dark surfaces.',
         '- Keep all artwork comfortably inside x: 64..448 and y: 64..448 so nothing touches or clips at the edges.',
         '- Never use external URLs, <image>, <script>, or animation tags inside the SVG.',
@@ -352,30 +353,44 @@ async function startServer() {
         .join('\n');
 
       const ai = getAiClient();
-      const response = await ai.models.generateContent({
-        model: 'gemini-4-hydrogen',
-        contents: prompt,
-        config: {
-          seed: seedVal,
-          thinkingConfig: { thinkingLevel: ThinkingLevel.MEDIUM },
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              rationale: {
-                type: Type.STRING,
-                description:
-                  'One concise sentence naming the concrete visual metaphor and shapes drawn in this SVG.',
+      const runSingleVector = async (useLite: boolean) =>
+        ai.models.generateContent({
+          model: useLite ? 'gemini-3.1-flash-lite' : 'gemini-4-hydrogen',
+          contents: prompt,
+          config: {
+            seed: seedVal,
+            thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+            responseMimeType: 'application/json',
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                rationale: {
+                  type: Type.STRING,
+                  description:
+                    'One short sentence naming the concrete visual metaphor drawn in this SVG.',
+                },
+                svg: {
+                  type: Type.STRING,
+                  description: 'Complete valid <svg viewBox="0 0 512 512">...</svg> markup.',
+                },
               },
-              svg: {
-                type: Type.STRING,
-                description: 'Complete valid <svg viewBox="0 0 512 512">...</svg> markup.',
-              },
+              required: ['rationale', 'svg'],
             },
-            required: ['rationale', 'svg'],
           },
-        },
-      });
+        });
+
+      let response;
+      try {
+        response = await runSingleVector(false);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message.toLowerCase() : String(err).toLowerCase();
+        if (msg.includes('429') || msg.includes('resource_exhausted') || msg.includes('quota')) {
+          await new Promise((r) => setTimeout(r, 800));
+          response = await runSingleVector(true);
+        } else {
+          throw err;
+        }
+      }
 
       const rawText = (response.text ?? '{}').trim();
       const parsedJson = JSON.parse(rawText) as { svg?: string; rationale?: string };
@@ -394,8 +409,217 @@ async function startServer() {
         rationale: parsedJson.rationale || '',
       });
     } catch (err) {
+      console.error('Vector logo generation error:', err);
       const parsed = formatGeminiError(err);
       res.status(parsed.status).json({ error: parsed.message });
+    }
+  });
+
+  app.post('/api/logos/generate-vector-batch', async (req: Request, res: Response) => {
+    const {
+      companyName,
+      description,
+      stylePreset = 'minimalist-geometric',
+      paletteHint = '',
+      conceptCount = 3,
+      avoidConcepts = [],
+      creativeSeed,
+    } = req.body as {
+      companyName?: string;
+      description?: string;
+      stylePreset?: string;
+      paletteHint?: string;
+      conceptCount?: number;
+      avoidConcepts?: string[];
+      creativeSeed?: number;
+    };
+
+    if (!companyName?.trim() && !description?.trim()) {
+      res.status(400).json({ error: 'Please provide a company name or description.' });
+      return;
+    }
+
+    const resolvedCount = Math.min(4, Math.max(2, Math.round(Number(conceptCount) || 3)));
+    const styleDirective =
+      STYLE_DIRECTIVES[stylePreset] || STYLE_DIRECTIVES['minimalist-geometric'];
+    const seedVal =
+      typeof creativeSeed === 'number' && Number.isFinite(creativeSeed)
+        ? Math.abs(Math.floor(creativeSeed))
+        : Math.floor(Math.random() * 1_000_000);
+
+    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders?.();
+
+    const sendEvent = (eventName: string, payload: unknown) => {
+      if (res.writableEnded) return;
+      res.write(`event: ${eventName}\ndata: ${JSON.stringify(payload)}\n\n`);
+    };
+
+    sendEvent('status', { phase: 'starting', count: resolvedCount });
+
+    const keepaliveTimer = setInterval(() => {
+      if (!res.writableEnded) {
+        res.write(': keepalive\n\n');
+      }
+    }, 2000);
+
+    let clientDisconnected = false;
+    res.on('close', () => {
+      if (!res.writableEnded) {
+        clientDisconnected = true;
+      }
+      clearInterval(keepaliveTimer);
+    });
+
+    try {
+      const slotSpecs = Array.from({ length: resolvedCount }, (_, idx) => {
+        const angle = VARIATION_ANGLES[idx % VARIATION_ANGLES.length];
+        return `Slot ${idx + 1} (slotIndex: ${idx}): ${angle}`;
+      }).join('\n');
+
+      const avoidBlock =
+        Array.isArray(avoidConcepts) && avoidConcepts.length > 0
+          ? `Do NOT repeat or resemble any of these previous concepts:\n${avoidConcepts
+              .slice(0, 8)
+              .map((c, idx) => `- Previous concept ${idx + 1}: ${c}`)
+              .join('\n')}`
+          : '';
+
+      const prompt = [
+        `You are a senior brand identity designer creating ${resolvedCount} completely distinct, original SVG logo concepts side-by-side for "${companyName?.trim() || 'the brand'}".`,
+        description?.trim()
+          ? `Company & Brand Brief (PRIMARY SOURCE OF TRUTH): ${description.trim()}.`
+          : '',
+        `Style Direction: ${styleDirective}`,
+        paletteHint?.trim()
+          ? `Color Palette: ${paletteHint.trim()}.`
+          : 'Color Palette: Choose a welcoming 2 to 3 color palette tailored to this business (never default to dark gray/gold unless requested).',
+        `Creative Exploration Seed: #${seedVal}.`,
+        avoidBlock,
+        'Required Slots (each MUST use a genuinely different visual metaphor and silhouette from the other slots):',
+        slotSpecs,
+        'Strict SVG Rules for EVERY concept:',
+        '- Output a standalone <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">.',
+        '- Craft rich, agency-quality vector marks using 6 to 14 layered primitives (<path>, <circle>, <rect rx="...">, <polygon>, <defs><linearGradient>...</linearGradient></defs>, and crisp negative-space cutouts). Never output plain unstyled boxes.',
+        '- Keep the canvas background transparent (NO full-bleed 512x512 background rect).',
+        '- Keep all artwork inside x: 64..448 and y: 64..448.',
+        '- Never use external URLs, <image>, <script>, or animation tags.',
+      ]
+        .filter(Boolean)
+        .join('\n');
+
+      const ai = getAiClient();
+      const buildRequestParams = (useLite: boolean) => ({
+        model: useLite ? 'gemini-3.1-flash-lite' : 'gemini-4-hydrogen',
+        contents: prompt,
+        config: {
+          seed: seedVal,
+          thinkingConfig: {
+            thinkingLevel: ThinkingLevel.LOW,
+          },
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              concepts: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    slotIndex: {
+                      type: Type.INTEGER,
+                      description: 'Zero-based slot index (0, 1, 2, or 3).',
+                    },
+                    rationale: {
+                      type: Type.STRING,
+                      description: 'One short sentence naming the specific visual metaphor drawn.',
+                    },
+                    svg: {
+                      type: Type.STRING,
+                      description: 'Complete valid <svg viewBox="0 0 512 512">...</svg> markup.',
+                    },
+                  },
+                  required: ['slotIndex', 'rationale', 'svg'],
+                },
+              },
+            },
+            required: ['concepts'],
+          },
+        },
+      });
+
+      let stream;
+      try {
+        stream = await ai.models.generateContentStream(buildRequestParams(false));
+      } catch (err) {
+        const msg = err instanceof Error ? err.message.toLowerCase() : String(err).toLowerCase();
+        const isRateLimit = msg.includes('429') || msg.includes('resource_exhausted') || msg.includes('quota');
+        if (isRateLimit && !clientDisconnected) {
+          await new Promise((r) => setTimeout(r, 800));
+          stream = await ai.models.generateContentStream(buildRequestParams(true));
+        } else {
+          throw err;
+        }
+      }
+
+      let fullText = '';
+      if (stream) {
+        for await (const chunk of stream) {
+          if (clientDisconnected) break;
+          if (chunk.text) {
+            fullText += chunk.text;
+          }
+        }
+      }
+
+      if (clientDisconnected) {
+        clearInterval(keepaliveTimer);
+        return;
+      }
+
+      const parsedJson = JSON.parse(fullText.trim() || '{}') as {
+        concepts?: Array<{ slotIndex?: number; rationale?: string; svg?: string }>;
+      };
+      const items = Array.isArray(parsedJson.concepts) ? parsedJson.concepts : [];
+
+      if (items.length === 0) {
+        sendEvent('error', {
+          error: 'Model did not return SVG logo concepts. Please try again.',
+        });
+      } else {
+        for (let i = 0; i < resolvedCount; i++) {
+          const item = items.find((c) => c.slotIndex === i) || items[i];
+          if (item?.svg && item.svg.includes('<svg')) {
+            const cleanSvg = sanitizeSvg(item.svg);
+            const base64Svg = Buffer.from(cleanSvg, 'utf8').toString('base64');
+            sendEvent('slot', {
+              slotIndex: i,
+              svgMarkup: cleanSvg,
+              dataUrl: `data:image/svg+xml;base64,${base64Svg}`,
+              mimeType: 'image/svg+xml',
+              rationale: item.rationale || '',
+            });
+          } else {
+            sendEvent('slotError', {
+              slotIndex: i,
+              error: 'Concept slot returned incomplete SVG markup.',
+            });
+          }
+        }
+        sendEvent('done', { count: resolvedCount });
+      }
+    } catch (err) {
+      console.error('Batch vector logo generation error:', err);
+      const parsed = formatGeminiError(err);
+      sendEvent('error', { error: parsed.message });
+    } finally {
+      clearInterval(keepaliveTimer);
+      if (!res.writableEnded) {
+        res.end();
+      }
     }
   });
 
@@ -409,47 +633,61 @@ async function startServer() {
         };
 
       const ai = getAiClient();
-      const response = await ai.models.generateContent({
-        model: 'gemini-4-hydrogen',
-        contents: [
-          `Create canvas animation parameters for an animated brand logo reveal for "${companyName || 'the company'}".`,
-          `Motion Preset: ${motionPresetId}.`,
-          `User Motion Prompt: ${motionPrompt || 'Clean studio reveal with subtle rim light sweep.'}`,
-          'Return valid hex colors (#RRGGBB) with deep studio background contrast and a refined accent color matching the mood of the prompt.',
-        ].join('\n'),
-        config: {
-          thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              entranceStyle: {
-                type: Type.STRING,
-                description: 'One of: assemble, sweep, fluid, showcase',
+      const runChoreograph = async (useLite: boolean) =>
+        ai.models.generateContent({
+          model: useLite ? 'gemini-3.1-flash-lite' : 'gemini-4-hydrogen',
+          contents: [
+            `Create canvas animation parameters for an animated brand logo reveal for "${companyName || 'the company'}".`,
+            `Motion Preset: ${motionPresetId}.`,
+            `User Motion Prompt: ${motionPrompt || 'Clean studio reveal with subtle rim light sweep.'}`,
+            'Return valid hex colors (#RRGGBB) with deep studio background contrast and a refined accent color matching the mood of the prompt.',
+          ].join('\n'),
+          config: {
+            thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+            responseMimeType: 'application/json',
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                entranceStyle: {
+                  type: Type.STRING,
+                  description: 'One of: assemble, sweep, fluid, showcase',
+                },
+                backgroundTop: { type: Type.STRING, description: 'Hex color like #111318' },
+                backgroundBottom: { type: Type.STRING, description: 'Hex color like #07080A' },
+                accentColor: { type: Type.STRING, description: 'Hex highlight color like #E5A93C' },
+                glowIntensity: { type: Type.NUMBER, description: 'Number between 0.1 and 0.9' },
+                sweepAngleDeg: { type: Type.NUMBER, description: 'Angle in degrees -60 to 60' },
+                zoomScale: { type: Type.NUMBER, description: 'Target zoom scale 1.02 to 1.15' },
+                rotationDeg: { type: Type.NUMBER, description: 'Subtle entrance rotation -12 to 12' },
+                particleCount: { type: Type.INTEGER, description: 'Ambient particles 0 to 40' },
               },
-              backgroundTop: { type: Type.STRING, description: 'Hex color like #111318' },
-              backgroundBottom: { type: Type.STRING, description: 'Hex color like #07080A' },
-              accentColor: { type: Type.STRING, description: 'Hex highlight color like #E5A93C' },
-              glowIntensity: { type: Type.NUMBER, description: 'Number between 0.1 and 0.9' },
-              sweepAngleDeg: { type: Type.NUMBER, description: 'Angle in degrees -60 to 60' },
-              zoomScale: { type: Type.NUMBER, description: 'Target zoom scale 1.02 to 1.15' },
-              rotationDeg: { type: Type.NUMBER, description: 'Subtle entrance rotation -12 to 12' },
-              particleCount: { type: Type.INTEGER, description: 'Ambient particles 0 to 40' },
+              required: [
+                'entranceStyle',
+                'backgroundTop',
+                'backgroundBottom',
+                'accentColor',
+                'glowIntensity',
+                'sweepAngleDeg',
+                'zoomScale',
+                'rotationDeg',
+                'particleCount',
+              ],
             },
-            required: [
-              'entranceStyle',
-              'backgroundTop',
-              'backgroundBottom',
-              'accentColor',
-              'glowIntensity',
-              'sweepAngleDeg',
-              'zoomScale',
-              'rotationDeg',
-              'particleCount',
-            ],
           },
-        },
-      });
+        });
+
+      let response;
+      try {
+        response = await runChoreograph(false);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message.toLowerCase() : String(err).toLowerCase();
+        if (msg.includes('429') || msg.includes('resource_exhausted') || msg.includes('quota')) {
+          await new Promise((r) => setTimeout(r, 600));
+          response = await runChoreograph(true);
+        } else {
+          throw err;
+        }
+      }
 
       const raw = (response.text ?? '{}').trim();
       const parsed = JSON.parse(raw) as Record<string, unknown>;
@@ -521,62 +759,76 @@ async function startServer() {
         : '';
 
       const ai = getAiClient();
-      const response = await ai.models.generateContent({
-        model: 'gemini-4-hydrogen',
-        contents: [
-          briefContext,
-          'Conversation so far:',
-          conversationTranscript,
-          'Respond warmly as the Brand Guide. Keep your reply concise (2–4 friendly sentences). If the client is still unsure, ask 1–2 simple questions (like what they sell, who their customers are, or what feeling they want—modern, cozy, bold, playful). As soon as you have enough information to propose a strong logo direction (or if they ask for ideas), set suggestedBrief.ready = true with concrete, thoughtful values they can apply directly to their brief.',
-        ]
-          .filter(Boolean)
-          .join('\n\n'),
-        config: {
-          systemInstruction:
-            'You are the friendly, welcoming Gemini Brand Guide inside Forma Studio. You help clients who are unsure what they want for their company logo discover clear visual symbols, typography styles, and welcoming color palettes. Never use technical jargon. Valid stylePreset values are strictly: "minimalist-geometric", "heritage-emblem", "dimensional-3d", "illustrated-mascot".',
-          thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              reply: {
-                type: Type.STRING,
-                description: 'Friendly, encouraging conversational response.',
-              },
-              quickPrompts: {
-                type: Type.ARRAY,
-                items: { type: Type.STRING },
-                description: '2 to 3 short clickable follow-up replies the client might tap next.',
-              },
-              suggestedBrief: {
-                type: Type.OBJECT,
-                properties: {
-                  ready: {
-                    type: Type.BOOLEAN,
-                    description: 'True when there is enough context to apply a concrete logo brief.',
-                  },
-                  companyName: { type: Type.STRING },
-                  description: {
-                    type: Type.STRING,
-                    description: 'Rich visual logo description with clear symbols and mood.',
-                  },
-                  stylePreset: {
-                    type: Type.STRING,
-                    description:
-                      'One of: minimalist-geometric, heritage-emblem, dimensional-3d, illustrated-mascot',
-                  },
-                  paletteHint: {
-                    type: Type.STRING,
-                    description: '2 to 3 harmonious colors with friendly mood.',
-                  },
+      const runChat = async (useLite: boolean) =>
+        ai.models.generateContent({
+          model: useLite ? 'gemini-3.1-flash-lite' : 'gemini-4-hydrogen',
+          contents: [
+            briefContext,
+            'Conversation so far:',
+            conversationTranscript,
+            'Respond warmly as the Brand Guide. Keep your reply concise (2–4 friendly sentences). If the client is still unsure, ask 1–2 simple questions (like what they sell, who their customers are, or what feeling they want—modern, cozy, bold, playful). As soon as you have enough information to propose a strong logo direction (or if they ask for ideas), set suggestedBrief.ready = true with concrete, thoughtful values they can apply directly to their brief.',
+          ]
+            .filter(Boolean)
+            .join('\n\n'),
+          config: {
+            systemInstruction:
+              'You are the friendly, welcoming Gemini Brand Guide inside Forma Studio. You help clients who are unsure what they want for their company logo discover clear visual symbols, typography styles, and welcoming color palettes. Never use technical jargon. Valid stylePreset values are strictly: "minimalist-geometric", "heritage-emblem", "dimensional-3d", "illustrated-mascot".',
+            thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+            responseMimeType: 'application/json',
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                reply: {
+                  type: Type.STRING,
+                  description: 'Friendly, encouraging conversational response.',
                 },
-                required: ['ready'],
+                quickPrompts: {
+                  type: Type.ARRAY,
+                  items: { type: Type.STRING },
+                  description: '2 to 3 short clickable follow-up replies the client might tap next.',
+                },
+                suggestedBrief: {
+                  type: Type.OBJECT,
+                  properties: {
+                    ready: {
+                      type: Type.BOOLEAN,
+                      description: 'True when there is enough context to apply a concrete logo brief.',
+                    },
+                    companyName: { type: Type.STRING },
+                    description: {
+                      type: Type.STRING,
+                      description: 'Rich visual logo description with clear symbols and mood.',
+                    },
+                    stylePreset: {
+                      type: Type.STRING,
+                      description:
+                        'One of: minimalist-geometric, heritage-emblem, dimensional-3d, illustrated-mascot',
+                    },
+                    paletteHint: {
+                      type: Type.STRING,
+                      description: '2 to 3 harmonious colors with friendly mood.',
+                    },
+                  },
+                  required: ['ready'],
+                },
               },
+              required: ['reply', 'quickPrompts'],
             },
-            required: ['reply', 'quickPrompts'],
           },
-        },
-      });
+        });
+
+      let response;
+      try {
+        response = await runChat(false);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message.toLowerCase() : String(err).toLowerCase();
+        if (msg.includes('429') || msg.includes('resource_exhausted') || msg.includes('quota')) {
+          await new Promise((r) => setTimeout(r, 600));
+          response = await runChat(true);
+        } else {
+          throw err;
+        }
+      }
 
       const rawText = (response.text ?? '{}').trim();
       const parsed = JSON.parse(rawText) as {
