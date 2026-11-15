@@ -100,20 +100,20 @@ function formatGeminiError(err: unknown): ParsedError {
 
 const STYLE_DIRECTIVES: Record<string, string> = {
   'minimalist-geometric':
-    'Minimalist modern geometric vector logo design, crisp clean geometry, purposeful negative space, Swiss precision, flat studio mark on a clean solid background, no realistic packaging mockups.',
+    'Minimalist modern geometric vector logo design, crisp clean geometry, purposeful negative space, Swiss precision, flat studio mark, no realistic packaging mockups.',
   'heritage-emblem':
-    'Classic heritage brand emblem and bespoke monogram crest, refined symmetrical linework, architectural seal craftsmanship, centered cleanly on a solid matte background, no mockups.',
+    'Classic heritage brand emblem and bespoke monogram crest, refined symmetrical linework, architectural seal craftsmanship, centered cleanly, no mockups.',
   'dimensional-3d':
-    'Sculpted dimensional 3D brand icon logo, brushed anodized metal and smoked optical glass textures, subtle studio rim lighting, centered cleanly on a dark charcoal matte backdrop, sharp commercial render.',
+    'Sculpted dimensional 3D brand icon logo using layered gradients, highlights, and depth planes, crisp studio lighting, sharp commercial render.',
   'illustrated-mascot':
-    'Expressive modern illustrated mascot or emblem badge logo, confident bold silhouette, cohesive limited palette, clean vector character mark centered on a solid neutral backdrop.',
+    'Expressive modern illustrated mascot or emblem badge logo, confident bold silhouette, cohesive limited palette, clean vector character or object mark.',
 };
 
 const VARIATION_ANGLES: string[] = [
-  'Primary standalone iconic symbol mark, centered with generous margin.',
-  'Balanced emblem lockup combining a distinct symbol with clean bespoke brand typography for the company name.',
-  'Compact interlocking monogram or bold negative-space stamp inspired by the company initials.',
-  'Structured framed crest or geometric badge composition with high-contrast silhouette clarity.',
+  'Primary standalone iconic symbol mark illustrating the core product or metaphor, centered with generous margin.',
+  'Balanced lockup pairing a bespoke illustrated or geometric symbol on top/left with clean custom typography spelling the company name.',
+  'Clever negative-space monogram or interlocking letterform crafted directly from the company initials and domain.',
+  'Structured framed crest, shield, or organic badge composition with high-contrast silhouette clarity.',
 ];
 
 async function extractVideoFromInteraction(
@@ -296,12 +296,16 @@ async function startServer() {
         stylePreset = 'minimalist-geometric',
         paletteHint = '',
         variationIndex = 0,
+        avoidConcepts = [],
+        creativeSeed,
       } = req.body as {
         companyName?: string;
         description?: string;
         stylePreset?: string;
         paletteHint?: string;
         variationIndex?: number;
+        avoidConcepts?: string[];
+        creativeSeed?: number;
       };
 
       if (!companyName?.trim() && !description?.trim()) {
@@ -312,20 +316,36 @@ async function startServer() {
       const styleDirective =
         STYLE_DIRECTIVES[stylePreset] || STYLE_DIRECTIVES['minimalist-geometric'];
       const angle = VARIATION_ANGLES[variationIndex % VARIATION_ANGLES.length];
+      const seedVal =
+        typeof creativeSeed === 'number' && Number.isFinite(creativeSeed)
+          ? Math.abs(Math.floor(creativeSeed))
+          : Math.floor(Math.random() * 1_000_000) + variationIndex * 997;
+
+      const avoidBlock =
+        Array.isArray(avoidConcepts) && avoidConcepts.length > 0
+          ? `Do NOT repeat or resemble any of these previously generated logo concepts—invent a completely fresh visual metaphor and silhouette:\n${avoidConcepts
+              .slice(0, 8)
+              .map((c, idx) => `- Previous concept ${idx + 1}: ${c}`)
+              .join('\n')}`
+          : '';
 
       const prompt = [
-        `You are an elite brand identity designer crafting an original, high-craft SVG logo for "${companyName?.trim() || 'the brand'}".`,
-        description?.trim() ? `Company & Brand Brief: ${description.trim()}.` : '',
+        `You are a senior brand identity designer crafting an original, distinctive SVG logo for "${companyName?.trim() || 'the brand'}".`,
+        description?.trim()
+          ? `Company & Brand Brief (PRIMARY SOURCE OF TRUTH — build your visual metaphor directly from this): ${description.trim()}.`
+          : '',
         `Style Direction: ${styleDirective}`,
-        `Composition Angle: ${angle}`,
+        `Composition Angle (Slot ${variationIndex + 1}): ${angle}`,
         paletteHint?.trim()
           ? `Color Palette: ${paletteHint.trim()}.`
-          : 'Color Palette: Choose a sophisticated, cohesive 2 to 3 color brand palette with strong contrast on dark charcoal or neutral backgrounds.',
-        'SVG Technical Rules:',
+          : 'Color Palette: Choose a fresh, welcoming 2 to 3 color palette tailored to this specific industry and brand mood (avoid defaulting to dark gray/gold unless requested).',
+        avoidBlock,
+        'Creative & SVG Craftsmanship Rules:',
+        '- Invent a specific, recognizable visual metaphor rooted in the company name and description (e.g., botanical leaves, waves, wings, flames, architectural arches, animals, tools, food, stars, musical forms, etc.). NEVER default to generic concentric circles or plain empty hexagons.',
         '- Output a complete standalone <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">.',
-        '- Design rich, intentional multi-layered vector geometry using <path>, <circle>, <polygon>, <rect>, <g>, <defs> with <linearGradient> or <radialGradient>, and clean geometric <text> only when appropriate for a wordmark or monogram.',
-        '- Keep the canvas background transparent (do NOT fill the entire 512x512 canvas with an opaque square unless the variation is an emblem/badge shape centered inside the frame with generous padding around it).',
-        '- Keep all shapes well within x: 56..456 and y: 56..456 so nothing clips at the edges.',
+        '- Build expressive, well-proportioned custom vector artwork using smooth Bezier <path> curves, layered shapes, purposeful negative space, <defs> gradients, and crisp <text> only when the variation calls for a wordmark or monogram.',
+        '- Keep the outer canvas background transparent (do NOT draw a full-bleed 512x512 background square) so the logo looks great on both white paper and dark surfaces.',
+        '- Keep all artwork comfortably inside x: 64..448 and y: 64..448 so nothing touches or clips at the edges.',
         '- Never use external URLs, <image>, <script>, or animation tags inside the SVG.',
       ]
         .filter(Boolean)
@@ -336,21 +356,23 @@ async function startServer() {
         model: 'gemini-4-hydrogen',
         contents: prompt,
         config: {
-          thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+          seed: seedVal,
+          thinkingConfig: { thinkingLevel: ThinkingLevel.MEDIUM },
           responseMimeType: 'application/json',
           responseSchema: {
             type: Type.OBJECT,
             properties: {
+              rationale: {
+                type: Type.STRING,
+                description:
+                  'One concise sentence naming the concrete visual metaphor and shapes drawn in this SVG.',
+              },
               svg: {
                 type: Type.STRING,
                 description: 'Complete valid <svg viewBox="0 0 512 512">...</svg> markup.',
               },
-              rationale: {
-                type: Type.STRING,
-                description: 'One short sentence describing the logo concept.',
-              },
             },
-            required: ['svg'],
+            required: ['rationale', 'svg'],
           },
         },
       });

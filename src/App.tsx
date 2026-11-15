@@ -96,7 +96,9 @@ export default function App() {
   const generateSingleConcept = async (
     targetBrief: BrandBrief,
     targetMode: EngineMode,
-    slotIndex: number
+    slotIndex: number,
+    batchSeed: number,
+    avoidList: string[]
   ): Promise<void> => {
     const variation = CONCEPT_VARIATIONS[slotIndex % CONCEPT_VARIATIONS.length];
     const styleObj =
@@ -125,6 +127,8 @@ export default function App() {
           paletteHint: targetBrief.paletteHint,
           imageSize: targetBrief.imageSize,
           variationIndex: slotIndex,
+          creativeSeed: batchSeed + slotIndex * 7919,
+          avoidConcepts: avoidList,
         }),
       });
 
@@ -132,6 +136,7 @@ export default function App() {
         dataUrl?: string;
         svgMarkup?: string;
         mimeType?: string;
+        rationale?: string;
         error?: string;
       };
 
@@ -149,6 +154,7 @@ export default function App() {
         companyName: targetBrief.companyName.trim() || 'Untitled Brand',
         styleLabel: styleObj.label,
         variationLabel: variation.label,
+        designNote: data.rationale || undefined,
         resolutionLabel: targetBrief.imageSize,
         createdAt: formatTimeLabel(),
       };
@@ -190,8 +196,14 @@ export default function App() {
     );
     setSlots(initialSlots);
 
+    const batchSeed = Math.floor(Math.random() * 900_000) + 100_000;
+    const recentNotes = logos
+      .map((l) => l.designNote)
+      .filter((n): n is string => Boolean(n && n.trim()))
+      .slice(0, 6);
+
     for (let i = 0; i < activeBrief.conceptCount; i++) {
-      void generateSingleConcept(activeBrief, engineMode, i);
+      void generateSingleConcept(activeBrief, engineMode, i, batchSeed, recentNotes);
     }
   };
 
@@ -602,7 +614,18 @@ export default function App() {
               slots={slots}
               selectedAsset={selectedLogo}
               onSelectAsset={setSelectedLogo}
-              onRetrySlot={(idx) => void generateSingleConcept(brief, engineMode, idx)}
+              onRetrySlot={(idx) =>
+                void generateSingleConcept(
+                  brief,
+                  engineMode,
+                  idx,
+                  Math.floor(Math.random() * 900_000) + 100_000,
+                  logos
+                    .map((l) => l.designNote)
+                    .filter((n): n is string => Boolean(n && n.trim()))
+                    .slice(0, 6)
+                )
+              }
               onSendToMotion={handleSendToMotion}
               onUploadFile={handleUploadFile}
               onLoadSample={handleLoadSample}

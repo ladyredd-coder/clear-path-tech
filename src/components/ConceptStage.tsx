@@ -297,7 +297,8 @@ export const ConceptStage: React.FC<ConceptStageProps> = ({
               </div>
 
               <p className="text-sm text-slate-600 leading-relaxed max-w-2xl">
-                Proof how this mark holds contrast across light paper, soft tint, and dark surfaces, download the master artwork, or send it to the Motion Stage to render a 16:9 or 9:16 animated reveal.
+                {selectedAsset.designNote ||
+                  'Proof how this mark holds contrast across light paper, soft tint, and dark surfaces, download the master artwork, or send it to the Motion Stage to render a 16:9 or 9:16 animated reveal.'}
               </p>
             </div>
 

@@ -51,6 +51,7 @@ export interface LogoAsset {
   companyName: string;
   styleLabel: string;
   variationLabel: string;
+  designNote?: string;
   resolutionLabel: ImageResolution | 'Custom';
   createdAt: string;
 }
